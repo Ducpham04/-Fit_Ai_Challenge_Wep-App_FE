@@ -36,3 +36,14 @@ jobs:
       - name: Deploy to S3
         working-directory: ./FIT_AI_Challenge_WEP/APP_FE
         run: aws s3 sync dist/ s3://fit-ai-challenge-frontend --delete
+      
+      - name: Invalidate CloudFront cache
+        run: |
+          if [ -n "${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" ]; then
+            aws cloudfront create-invalidation \
+              --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+              --paths "/*"
+            echo "CloudFront cache invalidated"
+          else
+            echo "CLOUDFRONT_DISTRIBUTION_ID not set, skipping invalidation"
+          fi
