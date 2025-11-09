@@ -1,0 +1,1113 @@
+openapi: 3.0.0
+info:
+  title: FitChallenge – AI Gym Challenge cho Người Dùng Việt Nam
+  description: |
+    FitChallenge là nền tảng thử thách thể hình sử dụng AI cho người dùng Việt Nam, cho phép tham gia thử thách, tải video tập luyện, nhận điểm AI và xem bảng xếp hạng.
+  version: 1.0.0
+servers:
+- url: https://api.fitchallenge.vn/v1
+  description: Máy chủ sản xuất
+- url: http://localhost:8080
+  description: Máy chủ phát triển cục bộ
+security:
+- bearerAuth: []
+tags:
+- name: Auth
+  description: Các API xác thực và quản lý người dùng
+- name: User
+  description: Thông tin và quản lý người dùng
+- name: Challenge
+  description: Quản lý thử thách thể hình
+- name: Workout
+  description: Quản lý video tập luyện và phân tích AI
+- name: Leaderboard
+  description: Bảng xếp hạng người dùng
+- name: Admin
+  description: API dành cho quản trị viên hệ thống
+paths:
+  /auth/register:
+    post:
+      tags:
+      - Auth
+      summary: Đăng ký người dùng mới
+      description: Tạo tài khoản người dùng mới trên hệ thống
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/auth_register_body"
+        required: true
+      responses:
+        "201":
+          description: Người dùng được tạo thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+              example:
+                id: user-123456
+                username: nguyenvana
+                email: nguyenvana@example.com
+                password: P@ssw0rd123
+                role: user
+                createdAt: 2024-05-01T08:30:00Z
+        "400":
+          description: Dữ liệu không hợp lệ
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security: []
+  /auth/login:
+    post:
+      tags:
+      - Auth
+      summary: Đăng nhập và nhận JWT
+      description: Xác thực người dùng và trả về token JWT
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/auth_login_body"
+        required: true
+      responses:
+        "200":
+          description: "Đăng nhập thành công, trả về token"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/inline_response_200"
+        "400":
+          description: Dữ liệu không hợp lệ
+        "401":
+          description: Xác thực thất bại
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security: []
+  /auth/refresh:
+    post:
+      tags:
+      - Auth
+      summary: Làm mới token JWT
+      description: Cấp lại token truy cập mới dựa trên refresh token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/auth_refresh_body"
+        required: true
+      responses:
+        "200":
+          description: Cấp token mới thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/inline_response_200_1"
+        "400":
+          description: Dữ liệu không hợp lệ
+        "401":
+          description: Token làm mới không hợp lệ hoặc hết hạn
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security: []
+  /auth/profile:
+    get:
+      tags:
+      - Auth
+      summary: Lấy thông tin hồ sơ người dùng hiện tại
+      description: Trả về thông tin chi tiết người dùng đã đăng nhập
+      responses:
+        "200":
+          description: Thông tin người dùng
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+              example:
+                id: user-123456
+                username: nguyenvana
+                email: nguyenvana@example.com
+                password: P@ssw0rd123
+                role: user
+                createdAt: 2024-05-01T08:30:00Z
+        "401":
+          description: Chưa xác thực hoặc token không hợp lệ
+        "500":
+          description: Lỗi máy chủ nội bộ
+    put:
+      tags:
+      - Auth
+      summary: Cập nhật thông tin người dùng hiện tại
+      description: Cho phép người dùng cập nhật thông tin cá nhân
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/auth_profile_body"
+        required: true
+      responses:
+        "200":
+          description: "Cập nhật thành công, trả về thông tin mới"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+              example:
+                id: user-123456
+                username: nguyenvana
+                email: nguyenvana@example.com
+                password: NewP@ssw0rd123
+                role: user
+                createdAt: 2024-05-01T08:30:00Z
+        "400":
+          description: Dữ liệu không hợp lệ
+        "401":
+          description: Chưa xác thực hoặc token không hợp lệ
+        "500":
+          description: Lỗi máy chủ nội bộ
+  /challenges:
+    get:
+      tags:
+      - Challenge
+      summary: Lấy danh sách tất cả thử thách
+      description: Trả về danh sách thử thách hiện có
+      responses:
+        "200":
+          description: Danh sách thử thách
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Challenge"
+              example:
+              - id: challenge-001
+                title: Thử thách 30 ngày Squat
+                description: Tham gia thử thách squat mỗi ngày trong 30 ngày để cải thiện sức mạnh chân.
+                startDate: 2024-06-01
+                endDate: 2024-06-30
+                difficulty: beginner
+                participants: []
+              - id: challenge-002
+                title: Thử thách Plank 7 ngày
+                description: Giữ plank mỗi ngày để tăng sức bền cơ core.
+                startDate: 2024-07-01
+                endDate: 2024-07-07
+                difficulty: intermediate
+                participants: []
+        "401":
+          description: Chưa xác thực hoặc token không hợp lệ
+        "500":
+          description: Lỗi máy chủ nội bộ
+    post:
+      tags:
+      - Challenge
+      summary: Tạo thử thách mới (chỉ admin)
+      description: Tạo một thử thách thể hình mới trong hệ thống
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/challenges_body"
+        required: true
+      responses:
+        "201":
+          description: Thử thách được tạo thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Challenge"
+              example:
+                id: challenge-003
+                title: Thử thách 10 ngày Chạy bộ
+                description: Chạy bộ mỗi ngày 5km trong 10 ngày.
+                startDate: 2024-08-01
+                endDate: 2024-08-10
+                difficulty: beginner
+                participants: []
+        "400":
+          description: Dữ liệu không hợp lệ
+        "401":
+          description: Không có quyền truy cập
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security:
+      - bearerAuth: []
+  /challenges/{id}:
+    get:
+      tags:
+      - Challenge
+      summary: Lấy chi tiết thử thách theo ID
+      description: Trả về thông tin chi tiết của thử thách
+      parameters:
+      - name: id
+        in: path
+        description: Mã thử thách
+        required: true
+        schema:
+          type: string
+          example: challenge-001
+      responses:
+        "200":
+          description: Thông tin thử thách
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Challenge"
+              example:
+                id: challenge-001
+                title: Thử thách 30 ngày Squat
+                description: Tham gia thử thách squat mỗi ngày trong 30 ngày để cải thiện sức mạnh chân.
+                startDate: 2024-06-01
+                endDate: 2024-06-30
+                difficulty: beginner
+                participants: []
+        "401":
+          description: Chưa xác thực hoặc token không hợp lệ
+        "404":
+          description: Không tìm thấy thử thách
+        "500":
+          description: Lỗi máy chủ nội bộ
+    put:
+      tags:
+      - Challenge
+      summary: Cập nhật thử thách theo ID
+      description: Cập nhật thông tin thử thách hiện có
+      parameters:
+      - name: id
+        in: path
+        description: Mã thử thách
+        required: true
+        schema:
+          type: string
+          example: challenge-001
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/challenges_id_body"
+        required: true
+      responses:
+        "200":
+          description: "Cập nhật thành công, trả về thử thách mới"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Challenge"
+              example:
+                id: challenge-001
+                title: Thử thách 30 ngày Squat nâng cao
+                description: Phiên bản nâng cao của thử thách squat 30 ngày.
+                startDate: 2024-06-01
+                endDate: 2024-06-30
+                difficulty: intermediate
+                participants: []
+        "400":
+          description: Dữ liệu không hợp lệ
+        "401":
+          description: Không có quyền truy cập
+        "404":
+          description: Không tìm thấy thử thách
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security:
+      - bearerAuth: []
+    delete:
+      tags:
+      - Challenge
+      summary: Xóa thử thách theo ID
+      description: Xóa thử thách khỏi hệ thống (chỉ admin)
+      parameters:
+      - name: id
+        in: path
+        description: Mã thử thách
+        required: true
+        schema:
+          type: string
+          example: challenge-001
+      responses:
+        "200":
+          description: Xóa thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/inline_response_200_2"
+        "401":
+          description: Không có quyền truy cập
+        "404":
+          description: Không tìm thấy thử thách
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security:
+      - bearerAuth: []
+  /challenges/{id}/join:
+    post:
+      tags:
+      - Challenge
+      summary: Người dùng tham gia thử thách
+      description: Thêm người dùng hiện tại vào danh sách tham gia thử thách
+      parameters:
+      - name: id
+        in: path
+        description: Mã thử thách
+        required: true
+        schema:
+          type: string
+          example: challenge-001
+      responses:
+        "200":
+          description: Tham gia thử thách thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/inline_response_200_3"
+        "400":
+          description: Yêu cầu không hợp lệ
+        "401":
+          description: Chưa xác thực hoặc token không hợp lệ
+        "404":
+          description: Không tìm thấy thử thách
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security:
+      - bearerAuth: []
+  /workouts:
+    get:
+      tags:
+      - Workout
+      summary: Lấy danh sách tất cả video tập luyện
+      description: Trả về danh sách các video tập luyện của người dùng
+      responses:
+        "200":
+          description: Danh sách video tập luyện
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Workout"
+              example:
+              - id: workout-7890
+                userId: user-123456
+                challengeId: challenge-001
+                videoUrl: https://s3.amazonaws.com/fitchallenge/videos/workout-7890.mp4
+                uploadTime: 2024-06-10T14:20:00Z
+                aiScore: 87.5
+                aiFeedback: "Tư thế squat tốt, cần cải thiện độ sâu."
+        "401":
+          description: Chưa xác thực hoặc token không hợp lệ
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security:
+      - bearerAuth: []
+  /workouts/{id}:
+    get:
+      tags:
+      - Workout
+      summary: Lấy chi tiết video tập luyện
+      description: Trả về thông tin chi tiết video tập luyện và điểm AI
+      parameters:
+      - name: id
+        in: path
+        description: Mã video tập luyện
+        required: true
+        schema:
+          type: string
+          example: workout-7890
+      responses:
+        "200":
+          description: Thông tin video tập luyện
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workout"
+              example:
+                id: workout-7890
+                userId: user-123456
+                challengeId: challenge-001
+                videoUrl: https://s3.amazonaws.com/fitchallenge/videos/workout-7890.mp4
+                uploadTime: 2024-06-10T14:20:00Z
+                aiScore: 87.5
+                aiFeedback: "Tư thế squat tốt, cần cải thiện độ sâu."
+        "401":
+          description: Chưa xác thực hoặc token không hợp lệ
+        "404":
+          description: Không tìm thấy video tập luyện
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security:
+      - bearerAuth: []
+  /workouts/upload:
+    post:
+      tags:
+      - Workout
+      summary: Tải video tập luyện lên S3
+      description: Tải video tập luyện lên S3 và trả về URL video
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/workouts_upload_body"
+        required: true
+      responses:
+        "201":
+          description: "Tải video thành công, trả về URL"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/inline_response_201"
+        "400":
+          description: Dữ liệu không hợp lệ hoặc file không hợp lệ
+        "401":
+          description: Chưa xác thực hoặc token không hợp lệ
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security:
+      - bearerAuth: []
+  /workouts/{id}/analyze:
+    post:
+      tags:
+      - Workout
+      summary: Phân tích video tập luyện bằng AI
+      description: Gửi video đến AWS Bedrock để phân tích tư thế và trả về kết quả AI
+      parameters:
+      - name: id
+        in: path
+        description: Mã video tập luyện
+        required: true
+        schema:
+          type: string
+          example: workout-7890
+      responses:
+        "200":
+          description: Kết quả phân tích AI
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIAnalysisResult"
+              example:
+                postureAccuracy: 92.3
+                repetitionCount: 15
+                formFeedback: "Tư thế lưng hơi cong, cần giữ thẳng hơn."
+                improvementTips: Tập trung vào giữ thẳng lưng và hạ thấp hông hơn.
+        "400":
+          description: Dữ liệu không hợp lệ
+        "401":
+          description: Chưa xác thực hoặc token không hợp lệ
+        "404":
+          description: Không tìm thấy video tập luyện
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security:
+      - bearerAuth: []
+  /workouts/history:
+    get:
+      tags:
+      - Workout
+      summary: Lấy lịch sử video tập luyện của người dùng
+      description: Trả về tất cả video tập luyện đã tải lên của người dùng hiện tại
+      responses:
+        "200":
+          description: Danh sách video tập luyện của người dùng
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Workout"
+              example:
+              - id: workout-7890
+                userId: user-123456
+                challengeId: challenge-001
+                videoUrl: https://s3.amazonaws.com/fitchallenge/videos/workout-7890.mp4
+                uploadTime: 2024-06-10T14:20:00Z
+                aiScore: 87.5
+                aiFeedback: "Tư thế squat tốt, cần cải thiện độ sâu."
+        "401":
+          description: Chưa xác thực hoặc token không hợp lệ
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security:
+      - bearerAuth: []
+  /leaderboard:
+    get:
+      tags:
+      - Leaderboard
+      summary: Lấy bảng xếp hạng 100 người dùng hàng đầu
+      description: Trả về danh sách xếp hạng tổng thể của người dùng
+      responses:
+        "200":
+          description: Danh sách bảng xếp hạng
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Leaderboard"
+              example:
+              - userId: user-123456
+                username: nguyenvana
+                totalScore: 950.75
+                rank: 12
+              - userId: user-789012
+                username: tranthib
+                totalScore: 900.5
+                rank: 13
+        "401":
+          description: Chưa xác thực hoặc token không hợp lệ
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security:
+      - bearerAuth: []
+  /leaderboard/{challengeId}:
+    get:
+      tags:
+      - Leaderboard
+      summary: Lấy bảng xếp hạng theo thử thách
+      description: Trả về bảng xếp hạng người dùng trong thử thách cụ thể
+      parameters:
+      - name: challengeId
+        in: path
+        description: Mã thử thách
+        required: true
+        schema:
+          type: string
+          example: challenge-001
+      responses:
+        "200":
+          description: Danh sách bảng xếp hạng thử thách
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Leaderboard"
+              example:
+              - userId: user-123456
+                username: nguyenvana
+                totalScore: 300.25
+                rank: 3
+              - userId: user-789012
+                username: tranthib
+                totalScore: 280.0
+                rank: 4
+        "401":
+          description: Chưa xác thực hoặc token không hợp lệ
+        "404":
+          description: Không tìm thấy thử thách
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security:
+      - bearerAuth: []
+  /leaderboard/user/{userId}:
+    get:
+      tags:
+      - Leaderboard
+      summary: Lấy xếp hạng cá nhân của người dùng
+      description: Trả về thông tin xếp hạng của người dùng cụ thể
+      parameters:
+      - name: userId
+        in: path
+        description: Mã người dùng
+        required: true
+        schema:
+          type: string
+          example: user-123456
+      responses:
+        "200":
+          description: Thông tin xếp hạng người dùng
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Leaderboard"
+              example:
+                userId: user-123456
+                username: nguyenvana
+                totalScore: 950.75
+                rank: 12
+        "401":
+          description: Chưa xác thực hoặc token không hợp lệ
+        "404":
+          description: Không tìm thấy người dùng
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security:
+      - bearerAuth: []
+  /admin/users:
+    get:
+      tags:
+      - Admin
+      summary: Lấy danh sách tất cả người dùng
+      description: API dành cho quản trị viên để xem danh sách người dùng
+      responses:
+        "200":
+          description: Danh sách người dùng
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+              example:
+              - id: user-123456
+                username: nguyenvana
+                email: nguyenvana@example.com
+                password: P@ssw0rd123
+                role: user
+                createdAt: 2024-05-01T08:30:00Z
+              - id: admin-001
+                username: admin
+                email: admin@fitchallenge.vn
+                password: AdminPass123
+                role: admin
+                createdAt: 2024-01-01T00:00:00Z
+        "401":
+          description: Không có quyền truy cập
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security:
+      - bearerAuth: []
+  /admin/logs:
+    get:
+      tags:
+      - Admin
+      summary: Lấy nhật ký hoạt động hệ thống
+      description: Xem các hoạt động và sự kiện hệ thống (dành cho admin)
+      responses:
+        "200":
+          description: Danh sách nhật ký hoạt động
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/inline_response_200_4"
+        "401":
+          description: Không có quyền truy cập
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security:
+      - bearerAuth: []
+  /admin/users/{id}:
+    delete:
+      tags:
+      - Admin
+      summary: Xóa người dùng theo ID
+      description: Xóa tài khoản người dùng khỏi hệ thống (chỉ admin)
+      parameters:
+      - name: id
+        in: path
+        description: Mã người dùng cần xóa
+        required: true
+        schema:
+          type: string
+          example: user-123456
+      responses:
+        "200":
+          description: Xóa thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/inline_response_200_5"
+        "401":
+          description: Không có quyền truy cập
+        "404":
+          description: Không tìm thấy người dùng
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security:
+      - bearerAuth: []
+  /admin/statistics:
+    get:
+      tags:
+      - Admin
+      summary: Thống kê tổng quan nền tảng
+      description: "Cung cấp các số liệu phân tích về người dùng, thử thách, và hoạt động"
+      responses:
+        "200":
+          description: Thống kê nền tảng
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/inline_response_200_6"
+        "401":
+          description: Không có quyền truy cập
+        "500":
+          description: Lỗi máy chủ nội bộ
+      security:
+      - bearerAuth: []
+components:
+  schemas:
+    User:
+      required:
+      - createdAt
+      - email
+      - id
+      - password
+      - role
+      - username
+      type: object
+      properties:
+        id:
+          type: string
+          description: Mã định danh người dùng
+          example: user-123456
+        username:
+          type: string
+          description: Tên đăng nhập
+          example: nguyenvana
+        email:
+          type: string
+          description: Địa chỉ email
+          format: email
+          example: nguyenvana@example.com
+        password:
+          type: string
+          description: Mật khẩu (đã mã hóa)
+          example: P@ssw0rd123
+        role:
+          type: string
+          description: Vai trò người dùng
+          example: user
+          enum:
+          - user
+          - admin
+        createdAt:
+          type: string
+          description: Thời gian tạo tài khoản
+          format: date-time
+          example: 2024-05-01T08:30:00Z
+      description: Thông tin người dùng
+    Challenge:
+      required:
+      - description
+      - difficulty
+      - endDate
+      - id
+      - participants
+      - startDate
+      - title
+      type: object
+      properties:
+        id:
+          type: string
+          description: Mã thử thách
+          example: challenge-001
+        title:
+          type: string
+          description: Tiêu đề thử thách
+          example: Thử thách 30 ngày Squat
+        description:
+          type: string
+          description: Mô tả chi tiết thử thách
+          example: Tham gia thử thách squat mỗi ngày trong 30 ngày để cải thiện sức mạnh chân.
+        startDate:
+          type: string
+          description: Ngày bắt đầu thử thách
+          format: date
+          example: 2024-06-01
+        endDate:
+          type: string
+          description: Ngày kết thúc thử thách
+          format: date
+          example: 2024-06-30
+        difficulty:
+          type: string
+          description: Mức độ thử thách
+          example: beginner
+          enum:
+          - beginner
+          - intermediate
+          - advanced
+        participants:
+          type: array
+          description: Danh sách người tham gia thử thách
+          example:
+          - id: user-123456
+            username: nguyenvana
+            email: nguyenvana@example.com
+            password: P@ssw0rd123
+            role: user
+            createdAt: 2024-05-01T08:30:00Z
+          items:
+            $ref: "#/components/schemas/User"
+      description: Thông tin thử thách thể hình
+    Workout:
+      required:
+      - aiFeedback
+      - aiScore
+      - challengeId
+      - id
+      - uploadTime
+      - userId
+      - videoUrl
+      type: object
+      properties:
+        id:
+          type: string
+          description: Mã video tập luyện
+          example: workout-7890
+        userId:
+          type: string
+          description: Mã người dùng tải video
+          example: user-123456
+        challengeId:
+          type: string
+          description: Mã thử thách liên quan
+          example: challenge-001
+        videoUrl:
+          type: string
+          description: URL video lưu trên S3
+          format: uri
+          example: https://s3.amazonaws.com/fitchallenge/videos/workout-7890.mp4
+        uploadTime:
+          type: string
+          description: Thời gian tải video lên
+          format: date-time
+          example: 2024-06-10T14:20:00Z
+        aiScore:
+          type: number
+          description: Điểm đánh giá AI
+          example: 87.5
+        aiFeedback:
+          type: string
+          description: Phản hồi chi tiết từ AI
+          example: "Tư thế squat tốt, cần cải thiện độ sâu."
+      description: Thông tin video tập luyện và điểm AI
+    Leaderboard:
+      required:
+      - rank
+      - totalScore
+      - userId
+      - username
+      type: object
+      properties:
+        userId:
+          type: string
+          description: Mã người dùng
+          example: user-123456
+        username:
+          type: string
+          description: Tên đăng nhập người dùng
+          example: nguyenvana
+        totalScore:
+          type: number
+          description: Tổng điểm tích lũy
+          example: 950.75
+        rank:
+          type: integer
+          description: Xếp hạng hiện tại
+          example: 12
+      description: Thông tin bảng xếp hạng người dùng
+    AIAnalysisResult:
+      required:
+      - formFeedback
+      - improvementTips
+      - postureAccuracy
+      - repetitionCount
+      type: object
+      properties:
+        postureAccuracy:
+          type: number
+          description: Độ chính xác tư thế (%)
+          example: 92.3
+        repetitionCount:
+          type: integer
+          description: Số lần lặp lại bài tập
+          example: 15
+        formFeedback:
+          type: string
+          description: Phản hồi về kỹ thuật tập luyện
+          example: "Tư thế lưng hơi cong, cần giữ thẳng hơn."
+        improvementTips:
+          type: string
+          description: Gợi ý cải thiện
+          example: Tập trung vào giữ thẳng lưng và hạ thấp hông hơn.
+      description: Kết quả phân tích AI cho video tập luyện
+    auth_register_body:
+      required:
+      - email
+      - password
+      - username
+      type: object
+      properties:
+        username:
+          type: string
+          example: nguyenvana
+        email:
+          type: string
+          format: email
+          example: nguyenvana@example.com
+        password:
+          type: string
+          example: P@ssw0rd123
+    auth_login_body:
+      required:
+      - password
+      - username
+      type: object
+      properties:
+        username:
+          type: string
+          example: nguyenvana
+        password:
+          type: string
+          example: P@ssw0rd123
+    inline_response_200:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          description: Token truy cập JWT
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        refreshToken:
+          type: string
+          description: Token làm mới
+          example: dGhpc2lzYXJlZnJlc2h0b2tlbg==
+    auth_refresh_body:
+      required:
+      - refreshToken
+      type: object
+      properties:
+        refreshToken:
+          type: string
+          example: dGhpc2lzYXJlZnJlc2h0b2tlbg==
+    inline_response_200_1:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+    auth_profile_body:
+      type: object
+      properties:
+        username:
+          type: string
+          example: nguyenvana
+        email:
+          type: string
+          format: email
+          example: nguyenvana@example.com
+        password:
+          type: string
+          example: NewP@ssw0rd123
+    challenges_body:
+      required:
+      - description
+      - difficulty
+      - endDate
+      - startDate
+      - title
+      type: object
+      properties:
+        title:
+          type: string
+          example: Thử thách 10 ngày Chạy bộ
+        description:
+          type: string
+          example: Chạy bộ mỗi ngày 5km trong 10 ngày.
+        startDate:
+          type: string
+          format: date
+          example: 2024-08-01
+        endDate:
+          type: string
+          format: date
+          example: 2024-08-10
+        difficulty:
+          type: string
+          example: beginner
+          enum:
+          - beginner
+          - intermediate
+          - advanced
+    challenges_id_body:
+      type: object
+      properties:
+        title:
+          type: string
+          example: Thử thách 30 ngày Squat nâng cao
+        description:
+          type: string
+          example: Phiên bản nâng cao của thử thách squat 30 ngày.
+        startDate:
+          type: string
+          format: date
+          example: 2024-06-01
+        endDate:
+          type: string
+          format: date
+          example: 2024-06-30
+        difficulty:
+          type: string
+          example: intermediate
+          enum:
+          - beginner
+          - intermediate
+          - advanced
+    inline_response_200_2:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Thử thách đã được xóa thành công.
+    inline_response_200_3:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Bạn đã tham gia thử thách thành công.
+    workouts_upload_body:
+      type: object
+      properties:
+        file:
+          type: string
+          description: Video tập luyện định dạng mp4
+          format: binary
+    inline_response_201:
+      type: object
+      properties:
+        videoUrl:
+          type: string
+          format: uri
+          example: https://s3.amazonaws.com/fitchallenge/videos/workout-7890.mp4
+    inline_response_200_4:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          example: 2024-06-10T15:00:00Z
+        userId:
+          type: string
+          example: user-123456
+        action:
+          type: string
+          example: User đăng nhập
+        detail:
+          type: string
+          example: Người dùng đăng nhập thành công
+    inline_response_200_5:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Người dùng đã được xóa thành công.
+    inline_response_200_6:
+      type: object
+      properties:
+        totalUsers:
+          type: integer
+          example: 1500
+        totalChallenges:
+          type: integer
+          example: 25
+        totalWorkouts:
+          type: integer
+          example: 4500
+        activeUsersLast30Days:
+          type: integer
+          example: 800
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
