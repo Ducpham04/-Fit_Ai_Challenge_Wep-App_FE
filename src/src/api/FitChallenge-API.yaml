@@ -1,0 +1,376 @@
+openapi: 3.0.0
+info:
+  title: Fit AI Challenge API
+  description: API for the Fit AI Challenge fitness application
+  version: 1.0.0
+  contact:
+    name: Fit AI Challenge Team
+    email: support@fitaichallenge.com
+
+servers:
+  - url: http://localhost:3001/api
+    description: Local development server
+  - url: https://api.fitaichallenge.com
+    description: Production server
+
+tags:
+  - name: Auth
+    description: Authentication endpoints
+  - name: Workouts
+    description: Workout management
+  - name: Challenges
+    description: Challenge management
+  - name: Users
+    description: User profile and data
+  - name: Leaderboard
+    description: Leaderboard and rankings
+  - name: Community
+    description: Community posts and interactions
+
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - email
+                - password
+              properties:
+                username:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid input
+
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Login user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+
+  /auth/profile:
+    get:
+      tags:
+        - Auth
+      summary: Get current user profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+
+  /workouts:
+    get:
+      tags:
+        - Workouts
+      summary: Get list of workouts
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: difficulty
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of workouts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Workout'
+
+  /challenges:
+    get:
+      tags:
+        - Challenges
+      summary: Get list of challenges
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [Active, Upcoming, Completed]
+        - name: difficulty
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of challenges
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Challenge'
+
+  /challenges/{id}:
+    get:
+      tags:
+        - Challenges
+      summary: Get challenge details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Challenge details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Challenge'
+        '404':
+          description: Challenge not found
+
+  /challenges/{id}/join:
+    post:
+      tags:
+        - Challenges
+      summary: Join a challenge
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Successfully joined challenge
+        '401':
+          description: Unauthorized
+
+  /leaderboard:
+    get:
+      tags:
+        - Leaderboard
+      summary: Get global leaderboard
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Leaderboard data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaderboardEntry'
+
+  /community/posts:
+    get:
+      tags:
+        - Community
+      summary: Get community posts
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of community posts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Post'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+        avatar:
+          type: string
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+        avatar:
+          type: string
+        joinDate:
+          type: string
+          format: date
+        aiScore:
+          type: integer
+        challengesCompleted:
+          type: integer
+        currentStreak:
+          type: integer
+        totalWorkouts:
+          type: integer
+
+    Workout:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        difficulty:
+          type: string
+        duration:
+          type: string
+        participants:
+          type: integer
+        image:
+          type: string
+        category:
+          type: string
+
+    Challenge:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        reward:
+          type: string
+        difficulty:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        participants:
+          type: integer
+        aiScore:
+          type: integer
+        image:
+          type: string
+        status:
+          type: string
+          enum: [Active, Upcoming, Completed]
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        rank:
+          type: integer
+        userId:
+          type: string
+        username:
+          type: string
+        avatar:
+          type: string
+        aiScore:
+          type: integer
+        challengesCompleted:
+          type: integer
+        streak:
+          type: integer
+
+    Post:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        username:
+          type: string
+        avatar:
+          type: string
+        content:
+          type: string
+        image:
+          type: string
+        likes:
+          type: integer
+        comments:
+          type: integer
+        timestamp:
+          type: string
