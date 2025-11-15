@@ -12,6 +12,8 @@ import { Login } from '../pages/Login';
 import { Register } from '../pages/Register';
 import { Settings } from '../pages/Settings';
 import { PushUpCounter } from '../pages/PushUpCounter';
+import BodyInformation from '../pages/BodyInformation';
+import BodyInformationEdit from '../pages/BodyInformationEdit';
 import { useAuth } from '../context/AuthContext';
 
 const Reports = lazy(() => import('../pages/Reports'));
@@ -70,6 +72,16 @@ export const AppRouter = () => {
           <Route path="settings" element={
             <ProtectedRoute>
               <Settings />
+            </ProtectedRoute>
+          } />
+          <Route path="bodyinformation" element={
+            <ProtectedRoute>
+              <BodyInformation />
+            </ProtectedRoute>
+          } />
+          <Route path="bodyinformation/edit" element={
+            <ProtectedRoute>
+              <BodyInformationEdit />
             </ProtectedRoute>
           } />
           <Route path="reports" element={

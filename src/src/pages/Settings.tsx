@@ -1,8 +1,10 @@
 import { motion } from 'motion/react';
-import { Bell, Globe, Moon, Shield, User, Zap } from 'lucide-react';
+import { Bell, Globe, Moon, Shield, User, Zap, Activity } from 'lucide-react';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 export const Settings = () => {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const [language, setLanguage] = useState('en');
@@ -60,6 +62,29 @@ export const Settings = () => {
               </div>
               <button className="px-6 py-2 bg-gradient-to-r from-sky-400 to-lime-400 text-white rounded-lg hover:shadow-lg transition-shadow">
                 Save Changes
+              </button>
+            </div>
+          </motion.div>
+
+          {/* Body Information Settings */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="bg-white rounded-xl shadow-md p-6"
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <Activity className="w-6 h-6 text-sky-500" />
+              <h2 className="text-2xl text-gray-900">Body Information</h2>
+            </div>
+            
+            <div className="space-y-4">
+              <p className="text-gray-600 text-sm">Manage your body information to create a suitable workout plan.</p>
+              <button
+                onClick={() => navigate('/bodyinformation')}
+                className="px-6 py-2 bg-gradient-to-r from-sky-400 to-lime-400 text-white rounded-lg hover:shadow-lg transition-shadow"
+              >
+                Body Information
               </button>
             </div>
           </motion.div>
