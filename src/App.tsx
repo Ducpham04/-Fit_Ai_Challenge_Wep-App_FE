@@ -1,12 +1,15 @@
-import { AuthProvider } from './src/context/AuthContext';
-import { AppRouter } from './src/router';
-import { Toaster } from './components/ui/sonner';
+import { AuthProvider } from './context/AuthContext';
+import { ChallengeProvider } from './context/ChallengeContext';
+import { AppRouter } from './router';
+import { Toaster } from './components_1/ui/sonner';
 
 export default function App() {
   return (
     <AuthProvider>
-      <AppRouter />
-      <Toaster position="top-right" />
+      <ChallengeProvider>
+        <AppRouter />
+        <Toaster position="top-right" />
+      </ChallengeProvider>
     </AuthProvider>
   );
 }
