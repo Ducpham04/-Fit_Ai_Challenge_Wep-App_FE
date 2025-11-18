@@ -60,6 +60,9 @@
             "@types/react": "^19.2.2",
             "@types/react-dom": "^19.2.2",
             "@vitejs/plugin-react-swc": "^3.10.2",
+            "cors": "^2.8.5",
+            "express": "^5.1.0",
+            "multer": "^2.0.2",
             "vite": "^6.4.1"
       },
       "scripts": {

@@ -151,14 +151,17 @@ export const usePushUpCounter = (): UsePushUpCounterReturn => {
   );
 
   const startProcessing = useCallback(() => {
+    console.log('✅ startProcessing called');
     setIsProcessing(true);
     if (!startTimeRef.current) {
       startTimeRef.current = Date.now();
       lastRepTimeRef.current = Date.now();
+      console.log('  ✓ Timer refs initialized');
     }
   }, []);
 
   const stopProcessing = useCallback(() => {
+    console.log('⛔ stopProcessing called');
     setIsProcessing(false);
   }, []);
 

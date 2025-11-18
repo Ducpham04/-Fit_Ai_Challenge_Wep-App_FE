@@ -1,9 +1,13 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Upload, Play, Pause, RotateCcw, X } from 'lucide-react';
 import { motion } from 'motion/react';
 
+export interface VideoPlayerRef {
+  resetVideo: () => void;
+}
+
 interface VideoPlayerProps {
-  onVideoLoad?: (video: HTMLVideoElement) => void;
+  onVideoLoad?: (video: HTMLVideoElement, file?: File) => void;
   onVideoError?: (error: string) => void;
   onPlayStateChange?: (isPlaying: boolean) => void;
   className?: string;
@@ -12,12 +16,12 @@ interface VideoPlayerProps {
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const ALLOWED_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 
-export const VideoPlayer = ({
+export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   onVideoLoad,
   onVideoError,
   onPlayStateChange,
   className = '',
-}: VideoPlayerProps) => {
+}, ref) => {
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -29,6 +33,7 @@ export const VideoPlayer = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const currentFileRef = useRef<File | null>(null);
 
   // Handle file selection
   const handleFileSelect = useCallback(
@@ -60,6 +65,9 @@ export const VideoPlayer = ({
       setVideoSrc(url);
       setIsPlaying(false);
       setCurrentTime(0);
+      
+      // Store the file reference
+      currentFileRef.current = file;
     },
     [videoSrc, onVideoError]
   );
@@ -102,7 +110,7 @@ export const VideoPlayer = ({
   const handleVideoLoad = useCallback(() => {
     if (videoRef.current) {
       setDuration(videoRef.current.duration);
-      onVideoLoad?.(videoRef.current);
+      onVideoLoad?.(videoRef.current, currentFileRef.current || undefined);
     }
   }, [onVideoLoad]);
 
@@ -123,10 +131,12 @@ export const VideoPlayer = ({
       if (isPlaying) {
         videoRef.current.pause();
         setIsPlaying(false);
+        console.log('⏸️ Video paused, notifying parent');
         onPlayStateChange?.(false);
       } else {
         videoRef.current.play();
         setIsPlaying(true);
+        console.log('▶️ Video playing, notifying parent');
         onPlayStateChange?.(true);
       }
     }
@@ -149,9 +159,12 @@ export const VideoPlayer = ({
 
   const handleReset = useCallback(() => {
     if (videoRef.current) {
+      console.log('🔄 VideoPlayer: Resetting video');
+      videoRef.current.pause(); // Explicitly pause the video
       videoRef.current.currentTime = 0;
       setCurrentTime(0);
       setIsPlaying(false);
+      console.log('  ✓ Video paused and reset to 0');
       onPlayStateChange?.(false);
     }
   }, [onPlayStateChange]);
@@ -169,6 +182,11 @@ export const VideoPlayer = ({
       fileInputRef.current.value = '';
     }
   }, [videoSrc]);
+
+  // Expose reset method to parent via ref
+  useImperativeHandle(ref, () => ({
+    resetVideo: handleReset,
+  }), [handleReset]);
 
   // Format time helper
   const formatTime = (time: number): string => {
@@ -325,4 +343,6 @@ export const VideoPlayer = ({
       )}
     </div>
   );
-};
+});
+
+VideoPlayer.displayName = 'VideoPlayer';
