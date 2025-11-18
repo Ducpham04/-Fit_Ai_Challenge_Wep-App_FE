@@ -1,108 +1,309 @@
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion } from 'motion/react';
-import { useState, useEffect } from 'react';
-import { Activity } from 'lucide-react';
+import {
+  Activity,
+  Clock,
+  TrendingUp,
+  Award,
+  Loader2,
+  AlertCircle,
+} from 'lucide-react';
+import { VideoPlayer } from '../../../components/video/VideoPlayer';
+import { MetricCard } from '../../../components/metrics/MetricCard';
+import { usePushUpCounter } from '../../../hooks/usePushUpCounter';
 
 export const PushUpCounter = () => {
-  const [count, setCount] = useState(0);
-  const [sessionTime, setSessionTime] = useState(0);
-  const [isSessionActive, setIsSessionActive] = useState(false);
+  const {
+    metrics,
+    isModelReady,
+    isProcessing,
+    error,
+    startProcessing,
+    stopProcessing,
+    resetCounter,
+    processFrame,
+  } = usePushUpCounter();
+
+  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+
+  const processingRef = useRef<number | null>(null);
+  const videoContainerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Handle video load
+  const handleVideoLoad = useCallback((video: HTMLVideoElement) => {
+    setVideoElement(video);
+    setVideoError(null);
+  }, []);
+
+  // Handle video error
+  const handleVideoError = useCallback((errorMsg: string) => {
+    setVideoError(errorMsg);
+  }, []);
+
+  // Handle play state change
+  const handlePlayStateChange = useCallback((isPlaying: boolean) => {
+    setIsVideoPlaying(isPlaying);
+    if (isPlaying) {
+      startProcessing();
+    } else {
+      stopProcessing();
+    }
+  }, [startProcessing, stopProcessing]);
+
+  // Processing loop
+  useEffect(() => {
+    if (!isProcessing || !videoElement || !isVideoPlaying || !canvasRef.current) {
+      if (processingRef.current) {
+        cancelAnimationFrame(processingRef.current);
+        processingRef.current = null;
+      }
+      return;
+    }
+
+    const processLoop = async () => {
+      if (videoElement && !videoElement.paused && !videoElement.ended && canvasRef.current) {
+        await processFrame(videoElement, canvasRef.current);
+      }
+      processingRef.current = requestAnimationFrame(processLoop);
+    };
+
+    processingRef.current = requestAnimationFrame(processLoop);
+
+    return () => {
+      if (processingRef.current) {
+        cancelAnimationFrame(processingRef.current);
+        processingRef.current = null;
+      }
+    };
+  }, [isProcessing, videoElement, isVideoPlaying, processFrame]);
 
   useEffect(() => {
-    if (!isSessionActive) return;
-    const timer = setInterval(() => setSessionTime((t) => t + 1), 1000);
-    return () => clearInterval(timer);
-  }, [isSessionActive]);
+    if (isModelReady && videoElement && isVideoPlaying && !isProcessing) {
+      startProcessing();
+    }
+    if ((!isVideoPlaying || !videoElement) && isProcessing) {
+      stopProcessing();
+    }
+  }, [isModelReady, videoElement, isVideoPlaying, isProcessing, startProcessing, stopProcessing]);
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  // Get state display
+  const getStateDisplay = () => {
+    switch (metrics.state) {
+      case 'up':
+        return { text: 'At Top', color: 'text-lime-600', bg: 'bg-lime-100' };
+      case 'down':
+        return { text: 'At Bottom', color: 'text-orange-600', bg: 'bg-orange-100' };
+      default:
+        return { text: 'Waiting...', color: 'text-gray-600', bg: 'bg-gray-100' };
+    }
   };
 
-  const handleIncrement = () => setCount(count + 1);
-  const handleUndo = () => count > 0 && setCount(count - 1);
-  const handleReset = () => {
-    setCount(0);
-    setSessionTime(0);
-    setIsSessionActive(false);
-  };
+  const stateDisplay = getStateDisplay();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sky-400 via-sky-500 to-lime-400 flex items-center justify-center p-4">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md"
-      >
-        <div className="bg-white rounded-2xl shadow-2xl p-8">
-          <div className="text-center mb-8">
-            <Activity className="w-16 h-16 text-sky-500 mx-auto mb-4" />
-            <h1 className="text-3xl font-bold text-gray-900">Push-up Counter</h1>
-            <p className="text-gray-600 mt-2">AI-Powered Form Tracking</p>
-          </div>
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8"
+        >
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">Push-Up Counter</h1>
+          <p className="text-xl text-gray-600">
+            Upload a video and let AI count your push-ups automatically
+          </p>
+        </motion.div>
 
-          {/* Counter Display */}
-          <div className="bg-gradient-to-r from-sky-50 to-lime-50 rounded-xl p-8 mb-8 text-center">
-            <div className="text-6xl font-bold text-sky-600 mb-4">{count}</div>
-            <div className="text-2xl text-gray-700">{formatTime(sessionTime)}</div>
-          </div>
-
-          {/* Button Grid */}
-          <div className="space-y-4">
-            <button
-              onClick={() => {
-                setIsSessionActive(!isSessionActive);
-              }}
-              className="w-full py-4 bg-gradient-to-r from-sky-400 to-lime-400 text-white rounded-lg hover:shadow-lg transition-shadow font-semibold text-lg"
+        {/* Main Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Video Section */}
+          <div className="lg:col-span-2">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-white rounded-xl shadow-md p-6"
             >
-              {isSessionActive ? 'Pause' : 'Start Session'}
-            </button>
+              <div className="mb-4">
+                <h2 className="text-2xl font-semibold text-gray-900">Video</h2>
+              </div>
 
-            <button
-              onClick={handleIncrement}
-              disabled={!isSessionActive}
-              className="w-full py-4 bg-lime-500 text-white rounded-lg hover:shadow-lg transition-shadow font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              + Add Push-up
-            </button>
+              <div className="relative" ref={videoContainerRef}>
+                <VideoPlayer
+                  onVideoLoad={handleVideoLoad}
+                  onVideoError={handleVideoError}
+                  onPlayStateChange={handlePlayStateChange}
+                  className="mb-4"
+                />
+                
+                {/* Canvas overlay for pose visualization */}
+                <canvas
+                  ref={canvasRef}
+                  className="absolute top-0 left-0 w-full h-full pointer-events-none"
+                  style={{ display: isProcessing && videoElement ? 'block' : 'none' }}
+                />
+              </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={handleUndo}
-                className="py-3 bg-orange-400 text-white rounded-lg hover:shadow-lg transition-shadow"
-              >
-                Undo
-              </button>
-              <button
-                onClick={handleReset}
-                className="py-3 bg-gray-400 text-white rounded-lg hover:shadow-lg transition-shadow"
-              >
-                Reset
-              </button>
-            </div>
+              {/* Status Bar */}
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  {/* Model Status */}
+                  <div className="flex items-center gap-2">
+                    {isModelReady ? (
+                      <>
+                        <div className="w-2 h-2 bg-lime-500 rounded-full animate-pulse" />
+                        <span className="text-sm text-gray-600">Model Ready</span>
+                      </>
+                    ) : (
+                      <>
+                        <Loader2 className="w-4 h-4 text-sky-500 animate-spin" />
+                        <span className="text-sm text-gray-600">Loading Model...</span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Processing Status */}
+                  {isProcessing && (
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-sky-500 rounded-full animate-pulse" />
+                      <span className="text-sm text-gray-600">Processing...</span>
+                    </div>
+                  )}
+
+                  {/* State Display */}
+                  {videoElement && (
+                    <div
+                      className={`px-3 py-1 rounded-full text-sm font-medium ${stateDisplay.bg} ${stateDisplay.color}`}
+                    >
+                      {stateDisplay.text}
+                    </div>
+                  )}
+                </div>
+
+                {/* Reset Button */}
+                <button
+                  onClick={resetCounter}
+                  disabled={metrics.reps === 0}
+                  className="px-4 py-2 text-sm font-medium text-white bg-orange-500 rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Reset counter"
+                >
+                  Reset
+                </button>
+
+                {/* Error Display */}
+                {(error || videoError) && (
+                  <div className="flex items-center gap-2 text-red-600">
+                    <AlertCircle className="w-4 h-4" />
+                    <span className="text-sm">{error || videoError}</span>
+                  </div>
+                )}
+              </div>
+            </motion.div>
           </div>
 
-          {/* Stats */}
-          <div className="mt-8 p-4 bg-gray-50 rounded-lg">
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div>
-                <p className="text-gray-600 text-sm">Total</p>
-                <p className="text-2xl font-bold text-sky-600">{count}</p>
+          {/* Metrics Section */}
+          <div className="lg:col-span-1">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="space-y-4"
+            >
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">Metrics</h2>
+
+              {/* Reps Counter - Highlighted */}
+              <div role="status" aria-live="polite" aria-atomic="true">
+                <MetricCard
+                  title="Push-Ups"
+                  value={metrics.reps}
+                  icon={Activity}
+                  subtitle="total reps"
+                  color="sky"
+                  isHighlighted={true}
+                />
               </div>
-              <div>
-                <p className="text-gray-600 text-sm">Rate</p>
-                <p className="text-2xl font-bold text-lime-600">
-                  {sessionTime > 0 ? Math.round(count / (sessionTime / 60)) : 0}/min
-                </p>
-              </div>
-              <div>
-                <p className="text-gray-600 text-sm">Time</p>
-                <p className="text-2xl font-bold text-orange-600">{formatTime(sessionTime)}</p>
-              </div>
-            </div>
+
+              {/* Pace */}
+              <MetricCard
+                title="Pace"
+                value={metrics.pace}
+                icon={TrendingUp}
+                subtitle="reps/min"
+                color="lime"
+              />
+
+              {/* Elapsed Time */}
+              <MetricCard
+                title="Time"
+                value={metrics.elapsed}
+                icon={Clock}
+                subtitle="seconds"
+                color="orange"
+              />
+
+              {/* Quality Score */}
+              <MetricCard
+                title="Quality"
+                value={metrics.qualityScore}
+                icon={Award}
+                subtitle="form score"
+                color="purple"
+              />
+
+              
+            </motion.div>
           </div>
         </div>
-      </motion.div>
+
+        {/* Instructions */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="bg-white rounded-xl shadow-md p-6"
+        >
+          <h2 className="text-2xl font-semibold text-gray-900 mb-4">How It Works</h2>
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="flex gap-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-sky-100 text-sky-600 rounded-full flex items-center justify-center font-bold">
+                1
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-1">Upload Video</h3>
+                <p className="text-sm text-gray-600">
+                  Upload a video of yourself doing push-ups. Ensure your full body is visible.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-lime-100 text-lime-600 rounded-full flex items-center justify-center font-bold">
+                2
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-1">Press Play</h3>
+                <p className="text-sm text-gray-600">
+                  When the video starts, the model runs automatically and begins counting.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center font-bold">
+                3
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-1">Track Progress</h3>
+                <p className="text-sm text-gray-600">
+                  See reps, pace, time, and quality update in real-time while playing.
+                </p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
     </div>
   );
 };

@@ -13,8 +13,9 @@ import { Register } from '../features/auth/pages/Register';
 import { Settings } from '../features/settings/pages/Settings';
 import { PushUpCounter } from '../features/challenges/pages/PushUpCounter';
 import { useAuth } from '../context/AuthContext';
+import { AdminDashboard } from '../features/admin/AdminDashboard';
 
-const Reports = lazy(() => import('../features/reports/pages/Reports').then(m => ({ default: m.Reports })));
+const Reports = lazy(() => import('../features/reports/pages/Reports'));
 
 // Protected Route Component
 
@@ -76,6 +77,11 @@ export const AppRouter = () => {
                 <ProtectedRoute>
                   <Reports />
                 </ProtectedRoute>
+          } />
+          <Route path="admin/*" element={
+            <ProtectedRoute>
+              <AdminDashboard />
+            </ProtectedRoute>
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

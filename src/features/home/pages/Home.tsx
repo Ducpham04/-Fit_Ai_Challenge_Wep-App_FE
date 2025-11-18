@@ -152,7 +152,7 @@ export const Home = () => {
       id={workout.id}
       title={workout.title}
       description={workout.description}
-      image={"http://localhost:8080/" +workout.image}
+      videos={workout.video}
       difficulty={workout.difficulty}
       participants={workout.participants || 0} 
     />

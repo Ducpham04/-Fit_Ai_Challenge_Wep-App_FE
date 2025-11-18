@@ -6,6 +6,7 @@ interface Challenge {
   title: string;
   description: string;
   image: string;
+  video: string ;
   difficulty: string;
   status: string;
 }
@@ -14,6 +15,7 @@ interface ChallengeContextType {
   challenges: Challenge[];
   loading: boolean;
   error: string | null;
+  loadChallengeDetail: (id: number) => Promise<any>;
 }
 
 const ChallengeContext = createContext<ChallengeContextType | undefined>(undefined);
@@ -32,14 +34,15 @@ export const ChallengeProvider = ({ children }: { children: ReactNode }) => {
           title: c.title,
           description: c.description,
           image: c.goal?.imageLink || "",
+          video: c.linkVideos || "",
           difficulty: c.difficult,
           status: c.status,
         }));
-        console.log("Fetched challenges:", mapped);
         setChallenges(mapped);
       } catch (err: any) {
         setError(err.message || "Failed to fetch challenges");
       } finally {
+        console.log("Challenges fetched:", challenges);
         setLoading(false);
       }
     };
@@ -47,8 +50,18 @@ export const ChallengeProvider = ({ children }: { children: ReactNode }) => {
     fetchChallenges();
   }, []);
 
+  const loadChallengeDetail = async (id: number) => {
+    try {
+      const res = await ChallengeAPI.getChallengeById(id);
+      return res.data.data; // Trả đúng data
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch challenge detail");
+      return null;
+    }
+  };
+
   return (
-    <ChallengeContext.Provider value={{ challenges, loading, error }}>
+    <ChallengeContext.Provider value={{ challenges, loading, error, loadChallengeDetail }}>
       {children}
     </ChallengeContext.Provider>
   );

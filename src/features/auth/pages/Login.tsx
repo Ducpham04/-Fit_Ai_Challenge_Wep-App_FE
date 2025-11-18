@@ -17,7 +17,10 @@ export const Login = () => {
     
     try {
       await login(email, password);
-      navigate('/');
+      // Delay redirect to allow AuthContext to update user state
+      setTimeout(() => {
+        navigate('/');
+      }, 300);
     } catch (error) {
       console.log('Login failed:', error);
       alert('Login failed. Please try again.');
