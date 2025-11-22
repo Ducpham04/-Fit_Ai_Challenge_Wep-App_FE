@@ -12,6 +12,7 @@ import { Login } from '../pages/Login';
 import { Register } from '../pages/Register';
 import { Settings } from '../pages/Settings';
 import { PushUpCounter } from '../pages/PushUpCounter';
+import { SquatCounter } from '../pages/SquatCounter';
 import BodyInformation from '../pages/BodyInformation';
 import BodyInformationEdit from '../pages/BodyInformationEdit';
 import { useAuth } from '../context/AuthContext';
@@ -56,6 +57,11 @@ export const AppRouter = () => {
           <Route path="challenges/:id/counter" element={
             <ProtectedRoute>
               <PushUpCounter />
+            </ProtectedRoute>
+          } />
+          <Route path="challenges/:id/squat-counter" element={
+            <ProtectedRoute>
+              <SquatCounter />
             </ProtectedRoute>
           } />
           <Route path="leaderboard" element={<Leaderboard />} />

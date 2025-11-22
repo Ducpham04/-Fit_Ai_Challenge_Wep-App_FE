@@ -142,6 +142,90 @@ app.get('/api/analysis/:analysisId', (req, res) => {
   res.json(result);
 });
 
+// POST /api/analysis/squat - Upload video for squat analysis
+app.post('/api/analysis/squat', upload.single('video'), (req, res) => {
+  try {
+    console.log('\n🏋️ Received squat video upload request');
+    
+    if (!req.file) {
+      console.error('❌ No video file provided');
+      return res.status(400).json({
+        success: false,
+        error: 'No video file provided'
+      });
+    }
+
+    const targetReps = parseInt(req.body.targetReps) || 10;
+    console.log(`📋 Target Squats: ${targetReps}`);
+    console.log(`📁 File: ${req.file.filename} (${(req.file.size / 1024 / 1024).toFixed(2)} MB)`);
+
+    // Simulate AI processing delay
+    setTimeout(() => {
+      // Generate mock squat analysis results
+      const analysisId = `squat_ana_${Date.now()}`;
+      const totalReps = targetReps + Math.floor(Math.random() * 3);
+      const duration = 25 + Math.random() * 25; // 25-50 seconds
+      const averageRepSpeed = (totalReps / duration) * 60;
+
+      const result = {
+        success: true,
+        data: {
+          totalReps: totalReps,
+          duration: parseFloat(duration.toFixed(1)),
+          averageRepSpeed: parseFloat(averageRepSpeed.toFixed(1)),
+          formScore: 75 + Math.floor(Math.random() * 20), // 75-95
+          repDetails: Array.from({ length: totalReps }, (_, i) => ({
+            repNumber: i + 1,
+            duration: parseFloat((duration / totalReps).toFixed(2)),
+            quality: 70 + Math.floor(Math.random() * 25),
+            depthAchieved: 100 + Math.floor(Math.random() * 60), // knee angle 100-160
+            timestamp: parseFloat((duration / totalReps * i).toFixed(2))
+          })),
+          qualityMetrics: {
+            overallForm: 80 + Math.floor(Math.random() * 15),
+            consistency: 82 + Math.floor(Math.random() * 13),
+            depthOfSquat: 85 + Math.floor(Math.random() * 12),
+            kneeAlignment: 78 + Math.floor(Math.random() * 17),
+            tempo: 83 + Math.floor(Math.random() * 14)
+          },
+          videoMetadata: {
+            filename: req.file.originalname,
+            size: req.file.size,
+            duration: parseFloat(duration.toFixed(1)),
+            resolution: "1280x720",
+            frameRate: 30
+          }
+        },
+        analysisId: analysisId,
+        timestamp: new Date().toISOString()
+      };
+
+      // Store result
+      analysisStore.set(analysisId, result);
+
+      console.log('\n✅ Squat analysis completed successfully');
+      console.log(`📊 Analysis ID: ${analysisId}`);
+      console.log(`📈 Results: ${totalReps} squats, ${result.data.formScore}/100 form score`);
+      console.log('\n📄 Full JSON Response:');
+      console.log(JSON.stringify(result, null, 2));
+
+      // Save to file for inspection
+      const outputFile = `./analysis_${analysisId}.json`;
+      fs.writeFileSync(outputFile, JSON.stringify(result, null, 2));
+      console.log(`\n💾 Saved to: ${outputFile}`);
+
+      res.json(result);
+    }, 2000); // 2 second delay to simulate processing
+
+  } catch (error) {
+    console.error('❌ Error processing squat video:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // GET /api/analysis - Get all analysis results
 app.get('/api/analysis', (req, res) => {
   console.log('\n📚 Fetching all analyses');
@@ -170,7 +254,8 @@ app.listen(PORT, () => {
   console.log('================================');
   console.log(`📡 Server running on: http://localhost:${PORT}`);
   console.log(`🏥 Health check: http://localhost:${PORT}/health`);
-  console.log(`📤 Upload endpoint: POST http://localhost:${PORT}/api/analysis/pushup`);
+  console.log(`📤 Push-up endpoint: POST http://localhost:${PORT}/api/analysis/pushup`);
+  console.log(`🏋️ Squat endpoint: POST http://localhost:${PORT}/api/analysis/squat`);
   console.log(`📊 Get all analyses: GET http://localhost:${PORT}/api/analysis`);
   console.log('\n💡 Waiting for video uploads...\n');
 });

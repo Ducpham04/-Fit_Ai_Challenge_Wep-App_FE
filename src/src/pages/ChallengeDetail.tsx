@@ -31,7 +31,14 @@ export const ChallengeDetail = () => {
       setTimeout(() => {
         navigate(`/challenges/${id}/counter`);
       }, 500);
-    } else {
+    } 
+    // Redirect to the Squat Counter for challenge 2
+    else if (id === '2') {
+      setTimeout(() => {
+        navigate(`/challenges/${id}/squat-counter`);
+      }, 500);
+    } 
+    else {
       // For other challenges, show alert
       setTimeout(() => {
         alert('Successfully joined the challenge! 🎉');
