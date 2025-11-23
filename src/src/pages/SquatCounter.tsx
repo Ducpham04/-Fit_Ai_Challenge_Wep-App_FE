@@ -16,6 +16,7 @@ import { VideoPlayer, VideoPlayerRef } from '../components/video/VideoPlayer';
 import { MetricCard } from '../components/metrics/MetricCard';
 import { useSquatCounter } from '../hooks/useSquatCounter';
 import { uploadVideoForSquatAnalysis, SquatAnalysisResult } from '../api/squatAnalysis';
+import { workoutPlanApi, DailyWorkout } from '../api/workoutPlanApi';
 
 export const SquatCounter = () => {
   const {
@@ -34,8 +35,14 @@ export const SquatCounter = () => {
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [videoFile, setVideoFile] = useState<File | null>(null);
 
+  // API-driven workout targets (replaces hard-coded targetReps = 10)
+  const [dailyTarget, setDailyTarget] = useState<DailyWorkout | null>(null);
+  const [targetReps, setTargetReps] = useState<number>(10); // Default fallback
+  const [currentDay, setCurrentDay] = useState<number>(1);
+  const [isLoadingTarget, setIsLoadingTarget] = useState<boolean>(true);
+  const [targetError, setTargetError] = useState<string | null>(null);
+  
   // Backend integration state
-  const [targetReps] = useState(10);
   const [isCompleted, setIsCompleted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [backendResult, setBackendResult] = useState<SquatAnalysisResult | null>(null);
@@ -46,6 +53,41 @@ export const SquatCounter = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoPlayerRef = useRef<VideoPlayerRef>(null);
   const hasSubmittedRef = useRef(false);
+
+  /**
+   * Fetch daily target from API on component mount
+   * This replaces the hard-coded targetReps = 10
+   */
+  useEffect(() => {
+    const fetchDailyTarget = async () => {
+      try {
+        setIsLoadingTarget(true);
+        setTargetError(null);
+        
+        console.log('📊 Fetching daily squat target from API...');
+        
+        // Fetch the current day's target from the API
+        const target = await workoutPlanApi.getCurrentDayTarget('intermediate');
+        
+        setDailyTarget(target);
+        setTargetReps(target.squats);
+        setCurrentDay(target.day);
+        
+        console.log(`✅ Daily target loaded: Day ${target.day} - ${target.squats} squats`);
+      } catch (err: any) {
+        console.error('❌ Failed to fetch daily target:', err);
+        setTargetError(err.message || 'Failed to load daily target');
+        
+        // Fallback to default target
+        setTargetReps(10);
+        console.log('⚠️ Using fallback target: 10 squats');
+      } finally {
+        setIsLoadingTarget(false);
+      }
+    };
+
+    fetchDailyTarget();
+  }, []); // Run once on mount
 
   // Handle video load
   const handleVideoLoad = useCallback((video: HTMLVideoElement, file?: File) => {
@@ -319,10 +361,10 @@ export const SquatCounter = () => {
                     <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" />
                     <div className="flex-1">
                       <h3 className="font-bold text-green-900 mb-1">
-                        🎉 Challenge Completed!
+                        🎉 Day {currentDay} Completed!
                       </h3>
                       <p className="text-sm text-gray-700 mb-2">
-                        You've reached the target of {targetReps} squats! Great job!
+                        You've done {targetReps} squats! Great job!
                       </p>
                       
                       {/* Backend Submission Status */}
@@ -366,6 +408,45 @@ export const SquatCounter = () => {
               className="space-y-4"
             >
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">Metrics</h2>
+
+              {/* Daily Target Card */}
+              {isLoadingTarget ? (
+                <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 text-blue-700">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-sm font-medium">Loading daily target...</span>
+                  </div>
+                </div>
+              ) : targetError ? (
+                <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 text-yellow-700">
+                    <AlertCircle className="w-4 h-4" />
+                    <div className="text-sm">
+                      <p className="font-medium">Using default target</p>
+                      <p className="text-xs">{targetError}</p>
+                    </div>
+                  </div>
+                </div>
+              ) : dailyTarget && (
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-green-600 uppercase">Day {currentDay} Target</p>
+                      <p className="text-2xl font-bold text-green-900">{targetReps} squats</p>
+                    </div>
+                    <Award className="w-8 h-8 text-green-400" />
+                  </div>
+                  <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all duration-300"
+                      style={{ width: `${Math.min((metrics.reps / targetReps) * 100, 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-600 mt-1">
+                    {metrics.reps} / {targetReps} ({Math.round((metrics.reps / targetReps) * 100)}%)
+                  </p>
+                </div>
+              )}
 
               {/* Reps Counter - Highlighted */}
               <div role="status" aria-live="polite" aria-atomic="true">
