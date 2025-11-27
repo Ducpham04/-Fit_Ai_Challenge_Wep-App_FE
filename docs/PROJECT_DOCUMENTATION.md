@@ -155,6 +155,12 @@ export default defineConfig({
 - (Tối ưu) Bổ sung `vite.config.ts` manualChunks để giảm kích thước chunk và set `chunkSizeWarningLimit` phù hợp.
 - (Tài liệu) Thêm README chi tiết hơn về workflow dev, cách chạy mô phỏng pose-detection (mã mẫu), và yêu cầu môi trường (camera permissions, browser compatibility).
 
+## Module admin (cập nhật 2025-11-19)
+
+- `src/features/admin/context/AdminDataContext.tsx` đóng vai trò như một mock data store dùng chung cho toàn bộ trang admin (users, challenges, rewards, plans, meals/foods, transactions).
+- Tất cả các page trong `src/features/admin/pages/*` đã được hoàn thiện UI + CRUD dựa trên mock (dashboard, users, transactions, challenges, rewards, training plans, meals, foods). Việc kết nối API thật chỉ cần thay logic trong Provider.
+- README riêng tại `src/features/admin/README.md` mô tả kiến trúc, các tính năng hiện có và checklist để chuyển đổi sang backend thật.
+
 ---
 
 Nếu bạn muốn, tôi có thể: 

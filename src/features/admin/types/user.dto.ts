@@ -1,20 +1,26 @@
-// User Response DTO - Được trả về từ backend
+// User được trả về từ BE
 export interface UserResponseDTO {
   id: number;
   fullName: string;
   email: string;
   avatar: string;
-  role: string;
+  role: string;  // ADMIN | CUSTOMER | MANAGER
   createdAt: string;
   status: "active" | "banned" | "pending";
 }
 
-// User Request DTO - Gửi lên backend
+// Request gửi lên BE
 export interface UserRequestDTO {
   fullName: string;
+  password: string;
   email: string;
-  role: string;
+  roleId: number;     // ❗ phải là number
 }
 
-// User Form Input - Cho form submit
+export interface RoleGet {
+  id: number;         // BE chắc chắn trả về number
+  name: string;       // ADMIN
+  description: string;
+}
+
 export interface UserFormInput extends UserRequestDTO {}

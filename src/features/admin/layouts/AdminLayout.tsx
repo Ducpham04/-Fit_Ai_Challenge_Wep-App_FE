@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Button } from "@/components_1/ui/button";
+import { useState, ReactNode } from "react";
+import { SimpleButton as Button } from "@/components_1/ui/simple-button";
 import {
   Users,
   Dumbbell,
@@ -11,10 +11,11 @@ import {
   Menu,
   X,
   LayoutDashboard,
+  Target,
 } from "lucide-react";
 
 interface AdminLayoutProps {
-  children: React.ReactNode;
+  children: ReactNode;
   currentPage: string;
   onPageChange: (page: string) => void;
 }
@@ -22,14 +23,10 @@ interface AdminLayoutProps {
 interface NavItem {
   id: string;
   label: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
 }
 
-export function AdminLayout({
-  children,
-  currentPage,
-  onPageChange,
-}: AdminLayoutProps) {
+export function AdminLayout({ children, currentPage, onPageChange }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const navItems: NavItem[] = [
@@ -41,17 +38,23 @@ export function AdminLayout({
     { id: "training-plans", label: "Training Plans", icon: <BookOpen size={20} /> },
     { id: "meals", label: "Meals", icon: <Apple size={20} /> },
     { id: "foods", label: "Foods", icon: <Apple size={20} /> },
+    { id: "goals", label: "Goals", icon: <Target size={20} /> },
   ];
 
   return (
-    <div className="flex bg-gray-100">
-      {/* Sidebar - Fixed */}
+    <div className="flex h-screen bg-gray-100">
+
+      {/* Sidebar */}
       <aside
-        className={`fixed left-0 top-0 h-screen ${
-          sidebarOpen ? "w-[220px]" : "w-[70px]"
-        } bg-gray-900 text-white transition-all duration-300 ease-in-out flex flex-col border-r border-gray-800 z-40`}
+        className={`
+          fixed top-0 left-0 bottom-0 z-40
+          bg-gray-900 text-white border-r border-gray-800
+          transition-all duration-300 ease-in-out
+          flex flex-col
+          ${sidebarOpen ? "w-[220px]" : "w-[70px]"}
+        `}
       >
-        {/* Header + Logo */}
+        {/* Logo + Toggle */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-gray-800">
           {sidebarOpen && (
             <div className="flex items-center gap-2">
@@ -62,7 +65,6 @@ export function AdminLayout({
             </div>
           )}
 
-          {/* Toggle Button */}
           <Button
             variant="ghost"
             size="icon"
@@ -74,46 +76,43 @@ export function AdminLayout({
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 mt-2 px-2 space-y-1 overflow-y-auto">
+        <nav className="flex-1 px-2 py-3 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
-            const isActive = currentPage === item.id;
+            const active = currentPage === item.id;
 
             return (
               <button
                 key={item.id}
                 onClick={() => onPageChange(item.id)}
                 className={`
-                  w-full flex items-center gap-3 h-10 rounded-lg px-3 text-sm transition-colors
-                  ${isActive ? "bg-blue-600 text-white" : "text-gray-300 hover:bg-gray-800"}
+                  w-full flex items-center gap-3 h-10 rounded-lg px-3 text-sm
+                  transition-colors
+                  ${active ? "bg-blue-600 text-white" : "text-gray-300 hover:bg-gray-800"}
                 `}
               >
-                {/* Icon */}
-                <div className="flex-shrink-0 flex justify-center items-center w-6">
-                  {item.icon}
-                </div>
-
-                {/* Label */}
+                <div className="w-6 flex justify-center">{item.icon}</div>
                 {sidebarOpen && <span>{item.label}</span>}
               </button>
             );
           })}
         </nav>
 
-        {/* Settings at Bottom */}
+        {/* Bottom Settings */}
         <div className="p-2 border-t border-gray-800">
-          <button
-            className="w-full flex items-center gap-3 h-10 rounded-lg px-3 text-sm transition-colors text-gray-300 hover:bg-gray-800"
-          >
+          <button className="w-full flex items-center gap-3 h-10 rounded-lg px-3 text-sm text-gray-300 hover:bg-gray-800">
             <SettingsIcon size={20} />
             {sidebarOpen && <span>Settings</span>}
           </button>
         </div>
       </aside>
 
-      {/* Main Content - Offset by sidebar width */}
-      <main className={`flex-1 overflow-auto transition-all duration-300 ${
-        sidebarOpen ? "ml-[220px]" : "ml-[70px]"
-      }`}>
+      {/* Main Content */}
+      <main
+        className={`
+          flex-1 relative transition-all duration-300 min-h-screen
+          ${sidebarOpen ? "ml-[220px]" : "ml-[70px]"}
+        `}
+      >
         {children}
       </main>
     </div>

@@ -186,4 +186,83 @@
 
 html {
   font-size: var(--font-size);
+
 }
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Radix Dialog animations */
+@keyframes dialog-content-show {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes dialog-overlay-show {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Ensure dialogs render properly - OVERRIDE Tailwind */
+[data-radix-dialog-overlay] {
+  animation: dialog-overlay-show 0.2s ease-out;
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+[data-radix-dialog-content] {
+  animation: dialog-content-show 0.2s ease-out;
+  opacity: 1;
+  visibility: visible;
+  display: grid;
+}
+
+/* Portal container */
+[data-radix-portal] {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+
+[data-radix-portal] > * {
+  pointer-events: auto;
+}
+
+/* Force dialog visibility - CRITICAL */
+[data-slot="dialog-content"] {
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: grid !important;
+  position: fixed !important;
+}
+
+[data-slot="dialog-overlay"] {
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: block !important;
+}
+
+
+

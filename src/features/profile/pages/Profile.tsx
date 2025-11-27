@@ -2,9 +2,18 @@ import { motion } from 'motion/react';
 import { Trophy, Zap, Target, TrendingUp, Settings } from 'lucide-react';
 import { mockUserProfile } from '../../../api/mockData';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../../../context/AuthContext';
 
 export const Profile = () => {
-  const user = mockUserProfile;
+  const { user: authUser } = useAuth();
+  
+  // Nếu không có user từ auth, dùng mock data
+  const user = authUser ? {
+    ...mockUserProfile,
+    email: authUser.email,
+    username: authUser.fullName || authUser.email,
+    avatar: authUser.avatar || mockUserProfile.avatar,
+  } : mockUserProfile;
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
