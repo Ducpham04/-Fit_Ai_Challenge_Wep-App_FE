@@ -14,10 +14,11 @@ export type ChallengePayload = Omit<AdminChallenge, "id">;
 
 export interface AdminUser {
   id: number;
-  username: string;
+  fullName: string;
   email: string;
   status: "active" | "inactive" | "banned";
   role: string;
+  roleId: number ;
   createdAt: string;
   updatedAt: string;
 }
@@ -110,17 +111,34 @@ export type TrainingPlanStatus = "published" | "draft" | "archived";
 
 export interface AdminTrainingPlan {
   id: number;
-  name: string;
-  duration: string;
-  difficulty: TrainingDifficulty;
+  title: string;
+  durationWeeks: string;
+  difficultyLevel: TrainingDifficulty;
   subscribers: number;
   price: number;
   status: TrainingPlanStatus;
+  goalId : number ;
+  goalName : string ;
   focusArea: string;
-  updatedAt: string;
+  createAt: string;
 }
 
 export type TrainingPlanPayload = Omit<AdminTrainingPlan, "id">;
+
+export interface AdminNutritionPlan {
+  id: number;
+  name: string;
+  description: string;
+  target: string;
+  dailyCalories: number;
+  subscribers: number;
+  price: number;
+  status: "published" | "draft" | "archived";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type NutritionPlanPayload = Omit<AdminNutritionPlan, "id" | "createdAt" | "updatedAt">;
 
 export type TransactionType = "deposit" | "withdrawal" | "reward" | "purchase";
 export type TransactionStatus = "completed" | "pending" | "failed";

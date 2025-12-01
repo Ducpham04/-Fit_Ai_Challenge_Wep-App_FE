@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { SimpleButton as Button } from "@/components_1/ui/simple-button";
-import { Plus, Gift, Search, Filter, AlertCircle } from "lucide-react";
+import { Plus, Gift, Search, Filter, AlertCircle, Download, Calendar } from "lucide-react";
 import { SimpleInput as Input } from "@/components_1/ui/simple-input";
 import { SimpleModal } from "@/components_1/ui/simple-modal";
 import { SimpleSelect } from "@/components_1/ui/simple-select";
@@ -11,6 +11,93 @@ import {
   AdminReward,
   RewardPayload,
 } from "../types/admin-entities";
+
+interface RewardClaim {
+  id: number;
+  userId: string;
+  userName: string;
+  rewardId: number;
+  rewardName: string;
+  pointsSpent: number;
+  claimedAt: string;
+  status: "completed" | "pending" | "cancelled";
+}
+
+const MOCK_REWARD_CLAIMS: RewardClaim[] = [
+  {
+    id: 1,
+    userId: "user_001",
+    userName: "Nguyễn Văn A",
+    rewardId: 1,
+    rewardName: "iPhone 15",
+    pointsSpent: 5000,
+    claimedAt: "2024-11-25",
+    status: "completed",
+  },
+  {
+    id: 2,
+    userId: "user_002",
+    userName: "Trần Thị B",
+    rewardId: 2,
+    rewardName: "Samsung Galaxy S24",
+    pointsSpent: 4500,
+    claimedAt: "2024-11-24",
+    status: "completed",
+  },
+  {
+    id: 3,
+    userId: "user_003",
+    userName: "Phạm Văn C",
+    rewardId: 3,
+    rewardName: "AirPods Pro",
+    pointsSpent: 2000,
+    claimedAt: "2024-11-23",
+    status: "completed",
+  },
+  {
+    id: 4,
+    userId: "user_004",
+    userName: "Lê Thị D",
+    rewardId: 1,
+    rewardName: "iPhone 15",
+    pointsSpent: 5000,
+    claimedAt: "2024-11-22",
+    status: "pending",
+  },
+  {
+    id: 5,
+    userId: "user_005",
+    userName: "Hoàng Văn E",
+    rewardId: 4,
+    rewardName: "iPad Pro",
+    pointsSpent: 3500,
+    claimedAt: "2024-11-21",
+    status: "completed",
+  },
+  {
+    id: 6,
+    userId: "user_006",
+    userName: "Võ Thị F",
+    rewardId: 2,
+    rewardName: "Samsung Galaxy S24",
+    pointsSpent: 4500,
+    claimedAt: "2024-11-20",
+    status: "cancelled",
+  },
+  {
+    id: 7,
+    userId: "user_007",
+    userName: "Đặng Văn G",
+    rewardId: 5,
+    rewardName: "MacBook Air",
+    pointsSpent: 8000,
+    claimedAt: "2024-11-19",
+    status: "completed",
+  },
+];
+
+const TAB_IDS = ["rewards", "history"] as const;
+type TabId = (typeof TAB_IDS)[number];
 
 const EMPTY_REWARD_FORM: RewardPayload = {
   name: "",
@@ -32,6 +119,11 @@ export function RewardsPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [activeTab, setActiveTab] = useState<TabId>("rewards");
+  const [claims, setClaims] = useState<RewardClaim[]>(MOCK_REWARD_CLAIMS);
+  const [dateRangeStart, setDateRangeStart] = useState("");
+  const [dateRangeEnd, setDateRangeEnd] = useState("");
+  const [claimStatusFilter, setClaimStatusFilter] = useState<string>("");
   const [modalState, setModalState] = useState<{ open: boolean; mode: ModalMode; reward?: AdminReward }>({
     open: false,
     mode: "create",
@@ -161,6 +253,45 @@ export function RewardsPage() {
     };
   }, [rewards]);
 
+  const filteredClaims = useMemo(() => {
+    return claims.filter((claim) => {
+      const matchesStatus = !claimStatusFilter || claim.status === claimStatusFilter;
+      const claimDate = new Date(claim.claimedAt);
+      const matchesDateStart = !dateRangeStart || claimDate >= new Date(dateRangeStart);
+      const matchesDateEnd = !dateRangeEnd || claimDate <= new Date(dateRangeEnd);
+      return matchesStatus && matchesDateStart && matchesDateEnd;
+    });
+  }, [claims, claimStatusFilter, dateRangeStart, dateRangeEnd]);
+
+  const claimStats = useMemo(() => {
+    const completed = filteredClaims.filter((c) => c.status === "completed").length;
+    const pending = filteredClaims.filter((c) => c.status === "pending").length;
+    const cancelled = filteredClaims.filter((c) => c.status === "cancelled").length;
+    const totalPoints = filteredClaims.reduce((sum, c) => sum + c.pointsSpent, 0);
+    return { completed, pending, cancelled, totalPoints };
+  }, [filteredClaims]);
+
+  const handleExportClaims = () => {
+    const headers = ["ID", "User", "Reward", "Points", "Claimed Date", "Status"];
+    const rows = filteredClaims.map((claim) => [
+      claim.id,
+      claim.userName,
+      claim.rewardName,
+      claim.pointsSpent,
+      claim.claimedAt,
+      claim.status,
+    ]);
+
+    const csv = [headers, ...rows].map((row) => row.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `reward-claims-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    console.log("✅ [RewardsPage] Exported claims as CSV");
+  };
+
   return (
     <div className="p-8 space-y-8">
       {/* Error Alert */}
@@ -190,20 +321,51 @@ export function RewardsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="flex items-center gap-2">
-            <Filter size={16} />
-            Xuất báo cáo
-          </Button>
           <Button
-            className="flex items-center gap-2 px-4 py-2"
-            onClick={openCreateModal}
+            variant="outline"
+            className="flex items-center gap-2"
+            onClick={activeTab === "history" ? handleExportClaims : undefined}
           >
-            <Plus size={16} />
-            Thêm reward
+            <Download size={16} />
+            {activeTab === "history" ? "Xuất CSV" : "Xuất báo cáo"}
           </Button>
+          {activeTab === "rewards" && (
+            <Button
+              className="flex items-center gap-2 px-4 py-2"
+              onClick={openCreateModal}
+            >
+              <Plus size={16} />
+              Thêm reward
+            </Button>
+          )}
         </div>
       </div>
 
+      {/* Tab Navigation */}
+      <div className="bg-white rounded-lg shadow border-b">
+        <div className="flex overflow-x-auto">
+          {[
+            { id: "rewards" as TabId, label: "Rewards", icon: "🎁" },
+            { id: "history" as TabId, label: "History", icon: "📋" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-6 py-3 font-medium transition whitespace-nowrap ${
+                activeTab === tab.id
+                  ? "border-b-2 border-purple-600 text-purple-600"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              {tab.icon} {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Rewards Tab */}
+      {activeTab === "rewards" && (
+        <>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <RewardStat
           label="Reward đang mở"
@@ -350,6 +512,130 @@ export function RewardsPage() {
           </div>
         )}
       </div>
+        </>
+      )}
+
+      {/* History Tab */}
+      {activeTab === "history" && (
+        <div className="space-y-6">
+          {/* Stats */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <RewardStat
+              label="Completed Claims"
+              value={claimStats.completed}
+              description="Successfully redeemed"
+            />
+            <RewardStat
+              label="Pending Claims"
+              value={claimStats.pending}
+              description="Awaiting processing"
+            />
+            <RewardStat
+              label="Cancelled Claims"
+              value={claimStats.cancelled}
+              description="Cancelled redemptions"
+            />
+            <RewardStat
+              label="Total Points Spent"
+              value={claimStats.totalPoints.toLocaleString()}
+              description="Across all claims"
+            />
+          </div>
+
+          {/* Filters */}
+          <div className="bg-white rounded-lg shadow p-4 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Start Date</label>
+                <input
+                  type="date"
+                  value={dateRangeStart}
+                  onChange={(e) => setDateRangeStart(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">End Date</label>
+                <input
+                  type="date"
+                  value={dateRangeEnd}
+                  onChange={(e) => setDateRangeEnd(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Status</label>
+                <select
+                  value={claimStatusFilter}
+                  onChange={(e) => setClaimStatusFilter(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="">All Status</option>
+                  <option value="completed">Completed</option>
+                  <option value="pending">Pending</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+            </div>
+            {(dateRangeStart || dateRangeEnd || claimStatusFilter) && (
+              <button
+                onClick={() => {
+                  setDateRangeStart("");
+                  setDateRangeEnd("");
+                  setClaimStatusFilter("");
+                }}
+                className="w-full px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium text-sm"
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
+
+          {/* Claims Table */}
+          <div className="bg-white rounded-lg shadow overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">User</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Reward</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Points</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Claimed Date</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {filteredClaims.map((claim, idx) => (
+                  <tr key={claim.id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                    <td className="px-6 py-3 text-sm font-medium text-gray-900">{claim.userName}</td>
+                    <td className="px-6 py-3 text-sm text-gray-600">{claim.rewardName}</td>
+                    <td className="px-6 py-3 text-sm font-semibold text-purple-600">{claim.pointsSpent}</td>
+                    <td className="px-6 py-3 text-sm text-gray-600">{claim.claimedAt}</td>
+                    <td className="px-6 py-3 text-sm">
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          claim.status === "completed"
+                            ? "bg-green-100 text-green-800"
+                            : claim.status === "pending"
+                            ? "bg-yellow-100 text-yellow-800"
+                            : "bg-red-100 text-red-800"
+                        }`}
+                      >
+                        {claim.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {filteredClaims.length === 0 && (
+            <div className="text-center py-12">
+              <p className="text-gray-500 text-lg">No reward claims found</p>
+            </div>
+          )}
+        </div>
+      )}
 
       <SimpleModal
         isOpen={modalState.open}

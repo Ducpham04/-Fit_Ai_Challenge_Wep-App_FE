@@ -19,8 +19,13 @@ import { RewardsPage } from "../features/admin/pages/RewardsPage";
 import { TransactionsPage } from "../features/admin/pages/TransactionsPage";
 import { TrainingPlansPage } from "../features/admin/pages/TrainingPlansPage";
 import { MealsPage } from "../features/admin/pages/MealsPage";
-import { FoodsPage } from "../features/admin/pages/FoodsPage";
+import { FoodsLibraryPage } from "../features/admin/pages/FoodsLibraryPage";
 import { GoalsPage } from "../features/admin/pages/GoalsPage";
+import { RolesPage } from "../features/admin/pages/RolesPage";
+import { NutritionPlanPage } from "../features/admin/pages/NutritionPlanPage";
+import { AILogsPage } from "../features/admin/pages/AILogsPage";
+import { NotificationsPage } from "../features/admin/pages/NotificationsPage";
+import { SystemSettingsPage } from "../features/admin/pages/SystemSettingsPage";
 import { HashRouter } from "react-router-dom";
 
 export const AppRouter = () => {
@@ -41,8 +46,13 @@ export const AppRouter = () => {
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="training-plans" element={<TrainingPlansPage />} />
           <Route path="meals" element={<MealsPage />} />
-          <Route path="foods" element={<FoodsPage />} />
+          <Route path="foods" element={<FoodsLibraryPage />} />
           <Route path="goals" element={<GoalsPage />} />
+          <Route path="roles" element={<RolesPage />} />
+          <Route path="nutrition-plans" element={<NutritionPlanPage />} />
+          <Route path="ai-logs" element={<AILogsPage />} />
+          <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="settings" element={<SystemSettingsPage />} />
         </Route>
 
         {/* Main App */}

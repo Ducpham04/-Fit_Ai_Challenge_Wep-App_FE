@@ -12,6 +12,10 @@ import {
   X,
   LayoutDashboard,
   Target,
+  Lock,
+  Bot,
+  Leaf,
+  Bell,
 } from "lucide-react";
 
 interface AdminLayoutProps {
@@ -39,6 +43,10 @@ export function AdminLayout({ children, currentPage, onPageChange }: AdminLayout
     { id: "meals", label: "Meals", icon: <Apple size={20} /> },
     { id: "foods", label: "Foods", icon: <Apple size={20} /> },
     { id: "goals", label: "Goals", icon: <Target size={20} /> },
+    { id: "roles", label: "Roles", icon: <Lock size={20} /> },
+    { id: "nutrition-plans", label: "Nutrition", icon: <Leaf size={20} /> },
+    { id: "ai-logs", label: "AI Logs", icon: <Bot size={20} /> },
+    { id: "notifications", label: "Notifications", icon: <Bell size={20} /> },
   ];
 
   return (

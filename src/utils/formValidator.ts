@@ -7,7 +7,7 @@ export interface UserFormErrors {
 export function validateUserForm(data: {
   fullName: string;
   email: string;
-  roleId: string;
+  roleId: Number;
   password: string;
 }): UserFormErrors {
   const errors: UserFormErrors = {};

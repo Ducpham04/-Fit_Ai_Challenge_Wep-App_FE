@@ -77,12 +77,16 @@ async function callAPIWithFallback(apiCall: () => Promise<any>, mockData: any[],
 // Users API
 // -------------------------------
 export const userAPI = {
-  getAll: () => callAPIWithFallback(() => client.get('/admin/user'), MOCK_USERS, 'GET /admin/user'),
+  getAll: () => callAPIWithFallback(() => client.get('/admin/users'), MOCK_USERS, 'GET /admin/user'),
   create: (data: any) => callAPIWithFallback(() => client.post('/admin/user', data), MOCK_USERS, 'POST /admin/user'),
   update: (id: number, data: any) => callAPIWithFallback(() => client.put(`/admin/user/${id}`, data), MOCK_USERS, `PUT /admin/user/${id}`),
   delete: (id: number) => callAPIWithFallback(() => client.delete(`/admin/user/${id}`), MOCK_USERS, `DELETE /admin/user/${id}`),
 };
 
+export const infBodyAPI = {
+  getBodyData: (id: number) => callAPIWithFallback(() => client.get(`/admin/information-body/${id}`),MOCK_USERS
+
+)}
 // -------------------------------
 // Challenges API
 // -------------------------------
@@ -258,6 +262,7 @@ if (form.imageFile instanceof File) {
 };
 
 
+
 // -------------------------------
 // Training Plans API
 // -------------------------------
@@ -266,6 +271,8 @@ export const trainingPlanAPI = {
   create: (data: any) => callAPIWithFallback(() => client.post('/admin/training-plans', data), MOCK_TRAINING_PLANS, 'POST /admin/training-plan'),
   update: (id: number, data: any) => callAPIWithFallback(() => client.put(`/admin/training-plans/${id}`, data), MOCK_TRAINING_PLANS, `PUT /admin/training-plan/${id}`),
   delete: (id: number) => callAPIWithFallback(() => client.delete(`/admin/training-plans/${id}`), MOCK_TRAINING_PLANS, `DELETE /admin/training-plan/${id}`),
+  getById : (id : number) => callAPIWithFallback(() => client.get(`/user/training-details/${id}`),  MOCK_TRAINING_PLANS )  
+  
 };
 
 // -------------------------------
@@ -307,5 +314,6 @@ export const goalAPI = {
   update: (id: number, data: any) => callAPIWithFallback(() => client.put(`/admin/goals/${id}`, data), MOCK_GOALS, `PUT /admin/goal/${id}`),
   delete: (id: number) => callAPIWithFallback(() => client.delete(`/admin/goals/${id}`), MOCK_GOALS, `DELETE /admin/goal/${id}`),
 };
+
 
 export default client;

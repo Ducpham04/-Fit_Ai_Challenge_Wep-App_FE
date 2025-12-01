@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { SimpleButton as Button } from "@/components_1/ui/simple-button";
-import { Plus, CreditCard, Search, FileDown, AlertCircle } from "lucide-react";
+import { Plus, CreditCard, Search, FileDown, AlertCircle, Download, Calendar, Filter } from "lucide-react";
 import { SimpleInput as Input } from "@/components_1/ui/simple-input";
 import { SimpleModal } from "@/components_1/ui/simple-modal";
 import { SimpleSelect } from "@/components_1/ui/simple-select";
@@ -31,6 +31,9 @@ export function TransactionsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [dateRangeStart, setDateRangeStart] = useState("");
+  const [dateRangeEnd, setDateRangeEnd] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [modalState, setModalState] = useState<{
     open: boolean;
     mode: ModalMode;
@@ -131,6 +134,28 @@ export function TransactionsPage() {
     }
   };
 
+  const handleExportCSV = () => {
+    const headers = ["ID", "User", "Amount", "Type", "Date", "Status", "Note"];
+    const rows = filtered.map((tx) => [
+      tx.id,
+      tx.userName,
+      tx.amount,
+      tx.type,
+      tx.date,
+      tx.status,
+      tx.note || "",
+    ]);
+
+    const csv = [headers, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `transactions-${new Date().toISOString().split("T")[0]}.csv`);
+    link.click();
+    console.log("✅ [TransactionsPage] CSV exported successfully");
+  };
+
   const filtered = useMemo(() => {
     return transactions.filter((transaction) => {
       const matchesSearch =
@@ -140,9 +165,15 @@ export function TransactionsPage() {
         typeFilter === "all" ? true : transaction.type === typeFilter;
       const matchesStatus =
         statusFilter === "all" ? true : transaction.status === statusFilter;
-      return matchesSearch && matchesType && matchesStatus;
+      
+      // Date range filtering
+      const transactionDate = new Date(transaction.date);
+      const matchesDateStart = !dateRangeStart || transactionDate >= new Date(dateRangeStart);
+      const matchesDateEnd = !dateRangeEnd || transactionDate <= new Date(dateRangeEnd);
+      
+      return matchesSearch && matchesType && matchesStatus && matchesDateStart && matchesDateEnd;
     });
-  }, [transactions, searchTerm, typeFilter, statusFilter]);
+  }, [transactions, searchTerm, typeFilter, statusFilter, dateRangeStart, dateRangeEnd]);
 
   const aggregates = useMemo(() => {
     const completed = transactions.filter((t) => t.status === "completed");
@@ -189,10 +220,18 @@ export function TransactionsPage() {
           <Button
             variant="outline"
             className="flex items-center gap-2"
-            onClick={() => setExportModalOpen(true)}
+            onClick={handleExportCSV}
           >
-            <FileDown size={16} />
-            Xuất báo cáo
+            <Download size={16} />
+            Xuất CSV
+          </Button>
+          <Button
+            variant="outline"
+            className="flex items-center gap-2"
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            <Filter size={16} />
+            Bộ lọc
           </Button>
           <Button
             className="flex items-center gap-2 px-4 py-2"
@@ -203,6 +242,72 @@ export function TransactionsPage() {
           </Button>
         </div>
       </div>
+
+      {/* Advanced Filters */}
+      {showFilters && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">Start Date</label>
+              <input
+                type="date"
+                value={dateRangeStart}
+                onChange={(e) => setDateRangeStart(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">End Date</label>
+              <input
+                type="date"
+                value={dateRangeEnd}
+                onChange={(e) => setDateRangeEnd(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">Transaction Type</label>
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Types</option>
+                <option value="deposit">Deposit</option>
+                <option value="withdrawal">Withdrawal</option>
+                <option value="reward">Reward</option>
+                <option value="purchase">Purchase</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">Status</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Status</option>
+                <option value="completed">Completed</option>
+                <option value="pending">Pending</option>
+                <option value="failed">Failed</option>
+              </select>
+            </div>
+          </div>
+          {(dateRangeStart || dateRangeEnd || typeFilter !== "all" || statusFilter !== "all") && (
+            <button
+              onClick={() => {
+                setDateRangeStart("");
+                setDateRangeEnd("");
+                setTypeFilter("all");
+                setStatusFilter("all");
+              }}
+              className="w-full px-3 py-2 bg-gray-300 hover:bg-gray-400 rounded-lg font-medium text-sm"
+            >
+              Clear All Filters
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <TransactionStat

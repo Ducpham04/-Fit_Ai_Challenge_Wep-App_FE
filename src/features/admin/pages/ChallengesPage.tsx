@@ -8,6 +8,7 @@ import { FormField } from "@/components_1/ui/form-field";
 import { SimpleTextarea as Textarea } from "@/components_1/ui/simple-textarea";
 import { challengeAPI } from "../api/adminAPI";
 import { AdminChallenge, ChallengePayload } from "../types/admin-entities";
+import { ChallengeDetailsPage } from "./ChallengeDetailsPage";
 
 const DEFAULT_FORM: ChallengePayload = {
   title: "",
@@ -57,6 +58,7 @@ export function ChallengesPage() {
   const [form, setForm] = useState<ChallengePayload>(DEFAULT_FORM);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [deleteModal, setDeleteModal] = useState<AdminChallenge | null>(null);
+  const [detailChallenge, setDetailChallenge] = useState<AdminChallenge | null>(null);
 
   // Debounced search
   const debouncedSearch = useDebounce(searchTerm, 300);
@@ -262,7 +264,11 @@ export function ChallengesPage() {
   }, [challenges]);
 
   return (
-    <main className="p-8 space-y-8 relative">
+    <main className="relative">
+      {detailChallenge ? (
+        <ChallengeDetailsPage challenge={detailChallenge} onBack={() => setDetailChallenge(null)} />
+      ) : (
+        <div className="p-8 space-y-8">
       {/* Error Alert */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
@@ -452,6 +458,13 @@ export function ChallengesPage() {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => setDetailChallenge(challenge)}
+                      >
+                        Chi tiết
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => openEditModal(challenge)}
                       >
                         Sửa
@@ -634,6 +647,8 @@ export function ChallengesPage() {
             động này không thể hoàn tác.
           </p>
         </SimpleModal>
+      )}
+        </div>
       )}
     </main>
   );

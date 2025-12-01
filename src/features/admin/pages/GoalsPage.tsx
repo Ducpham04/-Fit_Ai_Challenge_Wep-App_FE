@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { SimpleButton as Button } from "@/components_1/ui/simple-button";
-import { Plus, Target, Search, AlertCircle } from "lucide-react";
+import { Plus, Target, Search, AlertCircle, Zap, Dumbbell, Leaf } from "lucide-react";
 import { SimpleInput as Input } from "@/components_1/ui/simple-input";
 import { SimpleModal } from "@/components_1/ui/simple-modal";
 import { SimpleSelect } from "@/components_1/ui/simple-select";
@@ -8,6 +8,23 @@ import { FormField } from "@/components_1/ui/form-field";
 import { SimpleTextarea as Textarea } from "@/components_1/ui/simple-textarea";
 import { goalAPI } from "../api/adminAPI";
 import { AdminGoal, GoalPayload } from "../types/admin-entities";
+
+// Mock associations
+const MOCK_ASSOCIATIONS: Record<number, any> = {
+  1: {
+    challenges: [
+      { id: 1, name: "30-Day Push-up Challenge", completed: 245 },
+      { id: 2, name: "Plank Challenge", completed: 180 },
+    ],
+    trainingPlans: [
+      { id: 1, name: "Beginner Strength", users: 320 },
+      { id: 2, name: "Upper Body Focus", users: 150 },
+    ],
+    nutritionPlans: [
+      { id: 1, name: "High Protein Diet", calories: 2500 },
+    ],
+  },
+};
 
 const DEFAULT_FORM: GoalPayload = {
   userId: "",
@@ -23,7 +40,7 @@ const DEFAULT_FORM: GoalPayload = {
   endDate: "",
 };
 
-type ModalMode = "create" | "edit";
+type ModalMode = "create" | "edit" | "detail";
 
 export function GoalsPage() {
   const [goals, setGoals] = useState<AdminGoal[]>([]);
@@ -78,6 +95,10 @@ export function GoalsPage() {
     setForm(rest);
     setError(null);
     setModalState({ open: true, mode: "edit", goal });
+  };
+
+  const openDetailModal = (goal: AdminGoal) => {
+    setModalState({ open: true, mode: "detail", goal });
   };
 
   const closeModal = () => {
@@ -307,6 +328,9 @@ export function GoalsPage() {
                 </td>
                 <td className="px-6 py-4 text-gray-600 text-sm">{goal.endDate}</td>
                 <td className="px-6 py-4 text-right space-x-2">
+                  <Button variant="outline" size="sm" onClick={() => openDetailModal(goal)}>
+                    Chi tiết
+                  </Button>
                   <Button variant="outline" size="sm" onClick={() => openEditModal(goal)}>
                     Sửa
                   </Button>
@@ -335,20 +359,125 @@ export function GoalsPage() {
       <SimpleModal
         isOpen={modalState.open}
         onClose={closeModal}
-        title={modalState.mode === "create" ? "Thêm mục tiêu mới" : "Chỉnh sửa mục tiêu"}
+        title={
+          modalState.mode === "create"
+            ? "Thêm mục tiêu mới"
+            : modalState.mode === "detail"
+              ? "Chi tiết mục tiêu"
+              : "Chỉnh sửa mục tiêu"
+        }
         footer={
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={closeModal}>
-              Hủy
-            </Button>
-            <Button onClick={handleSubmit}>
-              {modalState.mode === "create" ? "Tạo mục tiêu" : "Lưu thay đổi"}
-            </Button>
-          </div>
+          modalState.mode === "detail" ? (
+            <div className="flex justify-end gap-2">
+              <Button onClick={closeModal}>Đóng</Button>
+            </div>
+          ) : (
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={closeModal}>
+                Hủy
+              </Button>
+              <Button onClick={handleSubmit}>
+                {modalState.mode === "create" ? "Tạo mục tiêu" : "Lưu thay đổi"}
+              </Button>
+            </div>
+          )
         }
       >
-        <div className="grid gap-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {modalState.mode === "detail" && modalState.goal ? (
+          /* Detail View */
+          <div className="space-y-6">
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-3">Thông tin mục tiêu</h3>
+              <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <p className="text-xs text-gray-600 uppercase">Tên mục tiêu</p>
+                  <p className="font-semibold text-gray-900 mt-1">{modalState.goal.title}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 uppercase">Loại</p>
+                  <span className={`inline-block px-2 py-1 rounded text-xs font-semibold capitalize ${typeColor(modalState.goal.type)} mt-1`}>
+                    {modalState.goal.type}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 uppercase">Tiến độ</p>
+                  <p className="font-semibold text-gray-900 mt-1">{modalState.goal.progress}%</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 uppercase">Trạng thái</p>
+                  <span className={`inline-block px-2 py-1 rounded text-xs font-semibold capitalize ${statusColor(modalState.goal.status)} mt-1`}>
+                    {modalState.goal.status}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Associations */}
+            {MOCK_ASSOCIATIONS[modalState.goal.id] && (
+              <>
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <Zap size={16} className="text-yellow-600" />
+                    Challenges ({MOCK_ASSOCIATIONS[modalState.goal.id].challenges?.length || 0})
+                  </h3>
+                  {MOCK_ASSOCIATIONS[modalState.goal.id].challenges?.length > 0 ? (
+                    <div className="space-y-2">
+                      {MOCK_ASSOCIATIONS[modalState.goal.id].challenges.map((c: any) => (
+                        <div key={c.id} className="p-3 border rounded-lg bg-yellow-50 hover:bg-yellow-100 transition">
+                          <p className="font-medium text-gray-900">{c.name}</p>
+                          <p className="text-sm text-gray-600">{c.completed.toLocaleString()} người hoàn thành</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-sm">Không có challenges</p>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <Dumbbell size={16} className="text-blue-600" />
+                    Training Plans ({MOCK_ASSOCIATIONS[modalState.goal.id].trainingPlans?.length || 0})
+                  </h3>
+                  {MOCK_ASSOCIATIONS[modalState.goal.id].trainingPlans?.length > 0 ? (
+                    <div className="space-y-2">
+                      {MOCK_ASSOCIATIONS[modalState.goal.id].trainingPlans.map((p: any) => (
+                        <div key={p.id} className="p-3 border rounded-lg bg-blue-50 hover:bg-blue-100 transition">
+                          <p className="font-medium text-gray-900">{p.name}</p>
+                          <p className="text-sm text-gray-600">{p.users.toLocaleString()} người đang theo dõi</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-sm">Không có training plans</p>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <Leaf size={16} className="text-green-600" />
+                    Nutrition Plans ({MOCK_ASSOCIATIONS[modalState.goal.id].nutritionPlans?.length || 0})
+                  </h3>
+                  {MOCK_ASSOCIATIONS[modalState.goal.id].nutritionPlans?.length > 0 ? (
+                    <div className="space-y-2">
+                      {MOCK_ASSOCIATIONS[modalState.goal.id].nutritionPlans.map((p: any) => (
+                        <div key={p.id} className="p-3 border rounded-lg bg-green-50 hover:bg-green-100 transition">
+                          <p className="font-medium text-gray-900">{p.name}</p>
+                          <p className="text-sm text-gray-600">{p.calories} kcal/ngày</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-sm">Không có nutrition plans</p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          /* Create/Edit View */
+          <div className="grid gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
               label="User ID"
               value={form.userId}
@@ -471,6 +600,7 @@ export function GoalsPage() {
             />
           </div>
         </div>
+        )}
       </SimpleModal>
 
       <SimpleModal
