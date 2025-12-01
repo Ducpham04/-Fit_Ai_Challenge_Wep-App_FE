@@ -3,13 +3,15 @@ import { useState } from 'react';
 import { Search, Filter } from 'lucide-react';
 import { ChallengeCard } from '../components/ChallengeCard';
 import { mockChallenges } from '../api/mockData';
-
+import { useChallenges } from '../../../context/ChallengeContext';
 export const Challenges = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDifficulty, setFilterDifficulty] = useState<string>('All');
   const [filterStatus, setFilterStatus] = useState<string>('All');
+  const { challenges , loading, error} = useChallenges();
 
-  const filteredChallenges = mockChallenges.filter((challenge: any) => {
+
+  const filteredChallenges = challenges.filter((challenge: any) => {
     const matchesSearch = challenge.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       challenge.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDifficulty = filterDifficulty === 'All' || challenge.difficulty === filterDifficulty;
@@ -63,8 +65,8 @@ export const Challenges = () => {
               >
                 <option value="All">All Difficulties</option>
                 <option value="Easy">Easy</option>
-                <option value="Medium">Medium</option>
-                <option value="Hard">Hard</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="HARD">Hard</option>
               </select>
             </div>
 
@@ -77,9 +79,9 @@ export const Challenges = () => {
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none appearance-none bg-white"
               >
                 <option value="All">All Status</option>
-                <option value="Active">Active</option>
-                <option value="Upcoming">Upcoming</option>
-                <option value="Completed">Completed</option>
+                <option value="ACTIVE">Active</option>
+                <option value="UPCOMING">Upcoming</option>
+                <option value="COMPLETED">Completed</option>
               </select>
             </div>
           </div>
@@ -99,7 +101,7 @@ export const Challenges = () => {
                   id={challenge.id}
                   title={challenge.title}
                   description={challenge.description}
-                  image={challenge.image}
+                  videos={challenge.video}
                   difficulty={challenge.difficulty}
                   participants={challenge.participants}
                   reward={challenge.reward}

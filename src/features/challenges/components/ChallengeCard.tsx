@@ -6,7 +6,7 @@ interface ChallengeCardProps {
   id: number;
   title: string;
   description: string;
-  image: string;
+  videos: string;
   difficulty: string;
   participants: number;
   reward?: string;
@@ -32,7 +32,7 @@ export const ChallengeCard = ({
   id,
   title,
   description,
-  image,
+  videos,
   difficulty,
   participants,
   reward,
@@ -47,11 +47,13 @@ export const ChallengeCard = ({
       className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-shadow"
     >
       <div className="relative h-48 overflow-hidden">
-        <img
-          src={image}
-          alt={title}
-          className="w-full h-full object-cover"
-        />
+       <video
+  src={`http://localhost:8080/${videos}`}
+  controls
+  className="w-full h-full object-cover"
+>
+  Your browser does not support the video tag.
+</video>
         <div className="absolute top-3 right-3">
           <span
             className={`px-3 py-1 rounded-full text-xs text-white ${statusColors[status]}`}
@@ -79,7 +81,7 @@ export const ChallengeCard = ({
         <div className="flex items-center gap-4 mb-4 text-sm text-gray-600">
           <div className="flex items-center gap-1">
             <Users className="w-4 h-4" />
-            <span>{participants.toLocaleString()}</span>
+            <span>{Number(participants).toLocaleString()}</span>
           </div>
           {reward && (
             <div className="flex items-center gap-1">

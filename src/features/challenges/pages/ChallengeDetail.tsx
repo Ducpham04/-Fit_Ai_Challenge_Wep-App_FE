@@ -2,14 +2,26 @@ import { motion } from 'motion/react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Calendar, Users, Trophy, Clock, Target, ArrowLeft, CheckCircle } from 'lucide-react';
 import { mockChallenges } from '../api/mockData';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useChallenges } from '@/context/ChallengeContext';
 
 export const ChallengeDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [isJoined, setIsJoined] = useState(false);
+  const {loadChallengeDetail} = useChallenges();
+  const [challenge , setChallenge] = useState<any>(null);
   
-  const challenge = mockChallenges.find((c) => c.id === Number(id));
+useEffect(() => {
+    const fetchChallengeDetail = async () => {
+      if (id) {
+        const data = await loadChallengeDetail(Number(id));
+        console.log("Fetched challenge detail:", data);
+        setChallenge(data);
+      }
+    };
+    fetchChallengeDetail();
+  }, [id, loadChallengeDetail]);
 
   if (!challenge) {
     return (
@@ -27,7 +39,7 @@ export const ChallengeDetail = () => {
   const handleJoinChallenge = () => {
     setIsJoined(true);
     // Redirect to the Push-Up Counter for challenge 1
-    if (id === '1') {
+    if (id === '3') {
       setTimeout(() => {
         navigate(`/challenges/${id}/counter`);
       }, 500);
@@ -59,7 +71,7 @@ export const ChallengeDetail = () => {
         >
           <div className="relative h-96">
             <img
-              src={challenge.image}
+              src={"http://localhost:8080/" +challenge.goal.imageLink}
               alt={challenge.title}
               className="w-full h-full object-cover"
             />
@@ -175,7 +187,7 @@ export const ChallengeDetail = () => {
                   <Users className="w-5 h-5 text-sky-500" />
                   <div>
                     <p className="text-sm text-gray-600">Participants</p>
-                    <p className="text-gray-900">{challenge.participants.toLocaleString()}</p>
+                    <p className="text-gray-900">{(challenge.participants || 0).toLocaleString()}</p>
                   </div>
                 </div>
 
@@ -212,7 +224,7 @@ export const ChallengeDetail = () => {
                     ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
                     : 'bg-gradient-to-r from-sky-400 to-lime-400 text-white hover:shadow-lg'
                 }`}
-              >
+              >                         
                 {isJoined ? 'Already Joined' : 'Join Challenge'}
               </button>
 

@@ -2,11 +2,11 @@ import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Zap, Users, Trophy, TrendingUp } from 'lucide-react';
 import { ChallengeCard } from '../../challenges/components/ChallengeCard';
-import { mockChallenges } from '../../challenges/api/mockData';
 import { useChallenges } from '../../../context/ChallengeContext';
-
+import { useAuth } from '../../../context/AuthContext';
 export const Home = () => {
   const { challenges } = useChallenges();
+  const {isAuthenticated} = useAuth() ;
   return (
     <div>
       {/* Hero Section */}
@@ -28,18 +28,33 @@ export const Home = () => {
                 Get personalized coaching, track your progress, and achieve your goals.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
-                <Link
-                  to="/register"
-                  className="px-8 py-4 bg-white text-sky-500 rounded-lg hover:shadow-2xl transition-shadow text-center"
-                >
-                  Get Started Free
-                </Link>
+               {!isAuthenticated && (
+  <Link
+    to="/register"
+    className="px-8 py-4 bg-white text-sky-500 rounded-lg hover:shadow-2xl transition-shadow text-center"
+  >
+    Get Started Free
+  </Link>
+)}
+
+               
                 <Link
                   to="/challenges"
                   className="px-8 py-4 bg-transparent border-2 border-white text-white rounded-lg hover:bg-white hover:text-sky-500 transition-colors text-center"
                 >
                   Explore Challenges
                 </Link>
+              
+
+<Link
+  to="/admin"
+  className="px-4 py-2 bg-blue-600 text-white rounded"
+>
+  Go to Admin
+</Link>
+
+            
+                
               </div>
             </motion.div>
 
@@ -152,7 +167,7 @@ export const Home = () => {
       id={workout.id}
       title={workout.title}
       description={workout.description}
-      image={"http://localhost:8080/" +workout.image}
+      videos={workout.video}
       difficulty={workout.difficulty}
       participants={workout.participants || 0} 
     />
