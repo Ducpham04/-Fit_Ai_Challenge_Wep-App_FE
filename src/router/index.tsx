@@ -11,6 +11,7 @@ import { Login } from "../features/auth/pages/Login";
 import { Register } from "../features/auth/pages/Register";
 import { Settings } from "../features/settings/pages/Settings";
 import { PushUpCounter } from "../features/challenges/pages/PushUpCounter";
+import { MyChallengePage } from "../features/myChallenge/pages/MyChallengePage";
 import { AdminDashboard } from "../features/admin/AdminDashboard";
 import { UserPage } from "../features/admin/pages/UserPage";
 import { DashboardPage } from "../features/admin/pages/DashboardPage";
@@ -59,6 +60,7 @@ export const AppRouter = () => {
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Home />} />
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="my-challenge" element={<MyChallengePage />} />
           <Route path="challenges" element={<Challenges />} />
           <Route path="challenges/:id" element={<ChallengeDetail />} />
           <Route path="challenges/:id/counter" element={<PushUpCounter />} />

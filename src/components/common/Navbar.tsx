@@ -13,6 +13,7 @@ export const Navbar = () => {
     { name: 'Home', path: '/' },
   
     { name: 'Dashboard', path: '/dashboard', protected: true },
+    { name: 'My Challenge', path: '/my-challenge', protected: true },
     { name: 'Challenges', path: '/challenges' },
     { name: 'Leaderboard', path: '/leaderboard' },
     { name: 'Community', path: '/community', protected: true },
