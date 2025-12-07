@@ -1,16 +1,17 @@
 import { useMemo, useState, useEffect } from "react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
 import { Plus, Gift, Search, Filter, AlertCircle, Download, Calendar } from "lucide-react";
-import { SimpleInput as Input } from "@/components_1/ui/simple-input";
-import { SimpleModal } from "@/components_1/ui/simple-modal";
-import { SimpleSelect } from "@/components_1/ui/simple-select";
-import { FormField } from "@/components_1/ui/form-field";
-import { SimpleTextarea as Textarea } from "@/components_1/ui/simple-textarea";
+import { SimpleInput as Input } from "@/components/ui/simple-input";
+import { SimpleModal } from "@/components/ui/simple-modal";
+import { SimpleSelect } from "@/components/ui/simple-select";
+import { FormField } from "@/components/ui/form-field";
+import { SimpleTextarea as Textarea } from "@/components/ui/simple-textarea";
 import { rewardAPI } from "../api/adminAPI";
 import {
   AdminReward,
   RewardPayload,
 } from "../types/admin-entities";
+import { extractDataFromResponse } from "../utils/responseHelper";
 
 interface RewardClaim {
   id: number;
@@ -143,17 +144,14 @@ export function RewardsPage() {
       console.log("📤 [RewardsPage] Fetching rewards...");
       const response = await rewardAPI.getAll();
       console.log("✅ [RewardsPage] Full response:", response);
-      let data = [];
-      if (Array.isArray(response.data)) {
-        data = response.data;
-      } else if (Array.isArray(response.data?.data)) {
-        data = response.data.data;
-      }
+      
+      // Extract data using helper function
+      const data = extractDataFromResponse<AdminReward>(response);
       console.log("📋 [RewardsPage] Extracted data:", data);
-      setRewards(Array.isArray(data) ? data : []);
+      setRewards(data);
     } catch (error: any) {
       console.error("❌ [RewardsPage] Error fetching rewards:", error);
-      setError(error?.message || "Không thể tải danh sách rewards");
+      setError(error?.response?.data?.message || error?.message || "Không thể tải danh sách rewards");
     } finally {
       setLoading(false);
     }

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
 import { Lock, Plus, Search, AlertCircle, Edit2, Trash2 } from "lucide-react";
-import { SimpleModal } from "@/components_1/ui/simple-modal";
-import { FormField } from "@/components_1/ui/form-field";
+import { SimpleModal } from "@/components/ui/simple-modal";
+import { FormField } from "@/components/ui/form-field";
 
 interface AdminRole {
   id: number;
@@ -109,20 +109,6 @@ const MOCK_ROLES: AdminRole[] = [
 ];
 
 type ModalMode = "create" | "edit";
-
-function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50" onClick={onClose}></div>
-      <div
-        className="bg-white p-8 rounded-xl w-[600px] max-w-[90%] shadow-2xl relative z-10 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
 
 export function RolesPage() {
   const [roles, setRoles] = useState<AdminRole[]>(MOCK_ROLES);
@@ -264,7 +250,8 @@ export function RolesPage() {
           </div>
           <Button
             onClick={openCreateModal}
-            className="flex items-center gap-2 bg-blue-600 px-4 py-2 hover:bg-blue-700"
+            variant="primary"
+            className="flex items-center gap-2"
           >
             <Plus size={18} /> Add Role
           </Button>
@@ -330,18 +317,22 @@ export function RolesPage() {
               </div>
 
               <div className="flex gap-2 pt-4 border-t">
-                <button
+                <Button
                   onClick={() => openEditModal(role)}
-                  className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium"
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 flex items-center justify-center gap-1"
                 >
                   <Edit2 size={14} /> Edit
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={() => openDeleteModal(role)}
-                  className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded text-sm font-medium"
+                  variant="danger"
+                  size="sm"
+                  className="flex-1 flex items-center justify-center gap-1"
                 >
                   <Trash2 size={14} /> Delete
-                </button>
+                </Button>
               </div>
             </div>
           ))}
@@ -356,11 +347,22 @@ export function RolesPage() {
 
       {/* Create/Edit Modal */}
       {modalState.open && !deleteTarget && (
-        <Modal onClose={closeModal}>
-          <h2 className="text-xl font-bold mb-6">
-            {modalState.mode === "create" ? "Create New Role" : "Edit Role"}
-          </h2>
-
+        <SimpleModal
+          isOpen={modalState.open}
+          onClose={closeModal}
+          title={modalState.mode === "create" ? "Create New Role" : "Edit Role"}
+          className="max-w-2xl max-h-[90vh] overflow-y-auto"
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={closeModal} disabled={submitLoading}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={handleSubmit} disabled={submitLoading}>
+                {submitLoading ? "Saving..." : "Save Role"}
+              </Button>
+            </div>
+          }
+        >
           <div className="space-y-4">
             <FormField 
               label="Role Name" 
@@ -409,38 +411,35 @@ export function RolesPage() {
               </div>
             </div>
           </div>
-
-          <div className="mt-6 flex justify-end gap-3">
-            <Button variant="outline" onClick={closeModal} disabled={submitLoading}>
-              Cancel
-            </Button>
-            <Button onClick={handleSubmit} disabled={submitLoading}>
-              {submitLoading ? "Saving..." : "Save Role"}
-            </Button>
-          </div>
-        </Modal>
+        </SimpleModal>
       )}
 
       {/* Delete Confirmation Modal */}
       {deleteTarget && (
-        <Modal onClose={closeModal}>
-          <h2 className="text-xl font-bold mb-4 text-red-600">Confirm Delete</h2>
-          <p>
-            Are you sure you want to delete the role <strong>{deleteTarget.name}</strong>?
-          </p>
-          <p className="text-sm text-gray-600 mt-2">
-            {deleteTarget.usersCount} users currently have this role.
-          </p>
-
-          <div className="mt-6 flex justify-end gap-3">
-            <Button variant="outline" onClick={closeModal} disabled={submitLoading}>
-              Cancel
-            </Button>
-            <Button onClick={handleDelete} disabled={submitLoading}>
-              {submitLoading ? "Deleting..." : "Delete Role"}
-            </Button>
+        <SimpleModal
+          isOpen={Boolean(deleteTarget)}
+          onClose={closeModal}
+          title="Confirm Delete"
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={closeModal} disabled={submitLoading}>
+                Cancel
+              </Button>
+              <Button variant="danger" onClick={handleDelete} disabled={submitLoading}>
+                {submitLoading ? "Deleting..." : "Delete Role"}
+              </Button>
+            </div>
+          }
+        >
+          <div>
+            <p className="text-red-600 font-semibold mb-2">
+              Are you sure you want to delete the role <strong>{deleteTarget.name}</strong>?
+            </p>
+            <p className="text-sm text-gray-600">
+              {deleteTarget.usersCount} users currently have this role.
+            </p>
           </div>
-        </Modal>
+        </SimpleModal>
       )}
     </main>
   );

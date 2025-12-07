@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
+import { SimpleModal } from "@/components/ui/simple-modal";
 import { Bell, Plus, Search, AlertCircle, Edit2, Trash2, Send } from "lucide-react";
-import { FormField } from "@/components_1/ui/form-field";
+import { FormField } from "@/components/ui/form-field";
 
 interface AdminNotification {
   id: number;
@@ -67,20 +68,6 @@ const MOCK_NOTIFICATIONS: AdminNotification[] = [
 ];
 
 type ModalMode = "create" | "edit" | "preview";
-
-function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50" onClick={onClose}></div>
-      <div
-        className="bg-white p-8 rounded-xl w-[600px] max-w-[90%] shadow-2xl relative z-10 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
 
 export function NotificationsPage() {
   const [notifications, setNotifications] = useState<AdminNotification[]>(MOCK_NOTIFICATIONS);
@@ -362,9 +349,23 @@ export function NotificationsPage() {
 
       {/* Create Modal */}
       {modalState.open && modalState.mode === "create" && !deleteTarget && (
-        <Modal onClose={closeModal}>
-          <h2 className="text-xl font-bold mb-6">Send New Notification</h2>
-
+        <SimpleModal
+          isOpen={modalState.open}
+          onClose={closeModal}
+          title="Send New Notification"
+          className="max-w-lg max-h-[90vh] overflow-y-auto"
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={closeModal} disabled={submitLoading}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={handleSend} disabled={submitLoading}>
+                <Send size={16} className="mr-2" />
+                {submitLoading ? "Sending..." : "Send Now"}
+              </Button>
+            </div>
+          }
+        >
           <div className="space-y-4">
             <FormField
               label="Title"
@@ -414,24 +415,23 @@ export function NotificationsPage() {
               </div>
             </div>
           </div>
-
-          <div className="mt-6 flex justify-end gap-3">
-            <Button variant="outline" onClick={closeModal} disabled={submitLoading}>
-              Cancel
-            </Button>
-            <Button onClick={handleSend} disabled={submitLoading}>
-              <Send size={16} className="mr-2" />
-              {submitLoading ? "Sending..." : "Send Now"}
-            </Button>
-          </div>
-        </Modal>
+        </SimpleModal>
       )}
 
       {/* Preview Modal */}
       {modalState.open && modalState.mode === "preview" && modalState.notification && (
-        <Modal onClose={closeModal}>
-          <h2 className="text-xl font-bold mb-4">Notification Preview</h2>
-
+        <SimpleModal
+          isOpen={modalState.open}
+          onClose={closeModal}
+          title="Notification Preview"
+          footer={
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={closeModal}>
+                Close
+              </Button>
+            </div>
+          }
+        >
           <div className={`p-4 rounded-lg mb-4 ${getTypeColor(modalState.notification.type)}`}>
             <h3 className="font-bold text-lg mb-2">{modalState.notification.title}</h3>
             <p className="text-sm mb-3">{modalState.notification.message}</p>
@@ -440,32 +440,30 @@ export function NotificationsPage() {
               {modalState.notification.totalRecipients} reads
             </div>
           </div>
-
-          <div className="mt-6 flex justify-end">
-            <Button variant="outline" onClick={closeModal}>
-              Close
-            </Button>
-          </div>
-        </Modal>
+        </SimpleModal>
       )}
 
       {/* Delete Modal */}
       {deleteTarget && (
-        <Modal onClose={closeModal}>
-          <h2 className="text-xl font-bold mb-4 text-red-600">Confirm Delete</h2>
-          <p>
+        <SimpleModal
+          isOpen={Boolean(deleteTarget)}
+          onClose={closeModal}
+          title="Confirm Delete"
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={closeModal} disabled={submitLoading}>
+                Cancel
+              </Button>
+              <Button variant="danger" onClick={handleDelete} disabled={submitLoading}>
+                {submitLoading ? "Deleting..." : "Delete"}
+              </Button>
+            </div>
+          }
+        >
+          <p className="text-red-600 font-semibold">
             Are you sure you want to delete this notification: <strong>{deleteTarget.title}</strong>?
           </p>
-
-          <div className="mt-6 flex justify-end gap-3">
-            <Button variant="outline" onClick={closeModal} disabled={submitLoading}>
-              Cancel
-            </Button>
-            <Button onClick={handleDelete} disabled={submitLoading}>
-              {submitLoading ? "Deleting..." : "Delete"}
-            </Button>
-          </div>
-        </Modal>
+        </SimpleModal>
       )}
     </main>
   );

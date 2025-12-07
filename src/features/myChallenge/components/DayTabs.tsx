@@ -16,7 +16,7 @@ export const DayTabs: React.FC<DayTabsProps> = ({ dayChallenges, selectedDay, on
           onClick={() => onSelectDay(day.dayNumber)}
           className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
             selectedDay === day.dayNumber
-              ? 'bg-blue-600 text-white'
+              ? 'bg-blue-600 '
               : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
           }`}
         >

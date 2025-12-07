@@ -1,9 +1,9 @@
 import { useMemo, useState, useEffect } from "react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
 import { Plus, Leaf, Search, AlertCircle } from "lucide-react";
-import { SimpleInput as Input } from "@/components_1/ui/simple-input";
-import { SimpleModal } from "@/components_1/ui/simple-modal";
-import { FormField } from "@/components_1/ui/form-field";
+import { SimpleInput as Input } from "@/components/ui/simple-input";
+import { SimpleModal } from "@/components/ui/simple-modal";
+import { FormField } from "@/components/ui/form-field";
 import { foodAPI } from "../api/adminAPI";
 import { AdminFood, FoodPayload } from "../types/admin-entities";
 

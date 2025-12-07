@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
 import {
   ArrowLeft,
   Mail,
@@ -11,9 +11,14 @@ import {
   CreditCard,
   BarChart3,
   AlertCircle,
+  Edit2,
+  X,
+  Save,
+  Plus,
 } from "lucide-react";
 import { AdminUser } from "../types/admin-entities";
-import { infBodyAPI, trainingPlanAPI } from "../api/adminAPI";
+import { infBodyAPI, trainingPlanAPI, challengeAPI } from "../api/adminAPI";
+import client from "@/api/client";
 
 interface UserBodyData {
   createdAt: string;
@@ -32,6 +37,20 @@ interface UserTrainingPlan {
   endDate: string;
   completionPercentage: number;
   status: "active" | "completed" | "paused";
+}
+
+interface TrainingPlanDetail {
+  id: number;
+  trainingPlanId: number;
+  dayNumber: number;
+  dayName: string;
+  challengeId: number;
+  challengeName: string;
+  sets: number;
+  reps: number;
+  duration?: number;
+  restTime?: number;
+  instructions?: string;
 }
 
 interface UserNutritionPlan {
@@ -130,7 +149,22 @@ const MOCK_TRANSACTIONS: UserTransaction[] = [
 export function UserDetailPage({ user, onBack }: UserDetailProps) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [body, setBody] = useState<UserBodyData[]>([]);
-  const [usertraining , setUserTraining] = useState<UserTrainingPlan[]>([])
+  const [usertraining , setUserTraining] = useState<UserTrainingPlan[]>([]);
+  const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
+  const [planDetails, setPlanDetails] = useState<TrainingPlanDetail[]>([]);
+  const [isEditingPlan, setIsEditingPlan] = useState(false);
+  const [editingDetails, setEditingDetails] = useState<{ [key: number]: TrainingPlanDetail }>({});
+  const [addingDay, setAddingDay] = useState<number | null>(null);
+  const [newDetail, setNewDetail] = useState<{
+    dayNumber: number;
+    challengeId: number;
+    challengeName: string;
+    sets: number;
+    reps: number;
+    duration?: number;
+    instructions?: string;
+  } | null>(null);
+  const [challenges, setChallenges] = useState<any[]>([]);
   // ==========================
   // Fetch Body API
   // ==========================
@@ -139,15 +173,38 @@ export function UserDetailPage({ user, onBack }: UserDetailProps) {
       try {
         const res = await infBodyAPI.getBodyData(user.id);
         
-        setBody(res.data.data ?? []);
-        console.log(res.data.data)
-        console.log("Log data" , body[0])
+        // Backend trả về UserInfoDTO (object đơn), cần convert sang array format
+        const bodyData = res.data?.data;
+        if (bodyData) {
+          // Convert UserInfoDTO to UserBodyData array format
+          // Handle BigDecimal conversion (backend sends numbers as strings or numbers)
+          const bodyArray: UserBodyData[] = [{
+            createdAt: bodyData.createdAt || new Date().toISOString(),
+            weightKg: typeof bodyData.weightKg === 'number' ? bodyData.weightKg : 
+                      (bodyData.weightKg ? parseFloat(String(bodyData.weightKg)) : 0),
+            heightCm: typeof bodyData.heightCm === 'number' ? bodyData.heightCm : 
+                      (bodyData.heightCm ? parseFloat(String(bodyData.heightCm)) : 0),
+            bmi: typeof bodyData.bmi === 'number' ? bodyData.bmi : 
+                 (bodyData.bmi ? parseFloat(String(bodyData.bmi)) : 0),
+            bodyFatPct: bodyData.bodyFatPct ? 
+                       (typeof bodyData.bodyFatPct === 'number' ? bodyData.bodyFatPct : 
+                        parseFloat(String(bodyData.bodyFatPct))) : undefined,
+            gender: bodyData.gender,
+            goalName: bodyData.goalName,
+          }];
+          setBody(bodyArray);
+          console.log("✅ Body data loaded:", bodyArray);
+        } else {
+          setBody([]);
+          console.log("⚠️ No body data found");
+        }
 
         const res_training = await trainingPlanAPI.getById(user.id)
         console.log("Log data usertraining DTO", res_training.data.data)
-        setUserTraining(res_training.data.data)
+        setUserTraining(res_training.data.data ?? [])
       } catch (err) {
-        console.error("Fetch body data fail:", err);
+        console.error("❌ Fetch body data fail:", err);
+        setBody([]); // Set empty array on error
       }
     })();
   }, [user.id]);
@@ -160,15 +217,19 @@ export function UserDetailPage({ user, onBack }: UserDetailProps) {
       return { avgWeight: 0, currentBMI: 0, weightChange: 0 };
 
     const current = body[0];
-    console.log("Current 0" , current.weightKg)
+    if (!current) {
+      return { avgWeight: 0, currentBMI: 0, weightChange: 0 };
+    }
+
+    console.log("Current 0", current.weightKg);
     const previous = body[body.length - 1];
 
-    const avgWeight = body.reduce((sum, d) => sum + d.weightKg, 0) / body.length;
+    const avgWeight = body.reduce((sum, d) => sum + (d.weightKg || 0), 0) / body.length;
 
     return {
       avgWeight: Math.round(avgWeight * 10) / 10,
-      currentBMI: current.bmi,
-      weightChange: previous.weightKg - current.weightKg,
+      currentBMI: current.bmi || 0,
+      weightChange: previous && previous.weightKg ? previous.weightKg - (current.weightKg || 0) : 0,
     };
   }, [body]);
 
@@ -364,23 +425,31 @@ export function UserDetailPage({ user, onBack }: UserDetailProps) {
                   <p className="text-sm text-gray-600 uppercase">
                     Current Weight
                   </p>
-                  <p className="text-2xl font-bold text-blue-600 mt-2">{body[body.length - 1].weightKg } kg</p>
+                  <p className="text-2xl font-bold text-blue-600 mt-2">
+                    {body.length > 0 ? `${body[body.length - 1]?.weightKg || 0} kg` : "N/A"}
+                  </p>
                   <p className="text-xs text-gray-600 mt-1">
-                    {bodyDataStats.weightChange > 0 ? "↓" : "↑"}{" "}
-                    {Math.abs(bodyDataStats.weightChange)} kg
+                    {body.length > 0 && bodyDataStats.weightChange !== 0 ? (
+                      <>
+                        {bodyDataStats.weightChange > 0 ? "↓" : "↑"}{" "}
+                        {Math.abs(bodyDataStats.weightChange)} kg
+                      </>
+                    ) : (
+                      "No change"
+                    )}
                   </p>
                 </div>
                 <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg">
                   <p className="text-sm text-gray-600 uppercase">Current BMI</p>
                   <p className="text-2xl font-bold text-green-600 mt-2">
-                    {bodyDataStats.currentBMI.toFixed(1)}
+                    {body.length > 0 ? bodyDataStats.currentBMI.toFixed(1) : "N/A"}
                   </p>
                   <p className="text-xs text-gray-600 mt-1">Normal range</p>
                 </div>
                 <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg">
                   <p className="text-sm text-gray-600 uppercase">Height</p>
                   <p className="text-2xl font-bold text-purple-600 mt-2">
-                    {body[0].heightCm} cm
+                    {body.length > 0 ? `${body[0]?.heightCm || 0} cm` : "N/A"}
                   </p>
                 </div>
               </div>
@@ -409,22 +478,30 @@ export function UserDetailPage({ user, onBack }: UserDetailProps) {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {body.map((data, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 text-gray-900">
-                          {new Date(data.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-2 text-gray-900">
-                          {data.weightKg}
-                        </td>
-                        <td className="px-4 py-2 text-gray-900">
-                          {data.heightCm}
-                        </td>
-                        <td className="px-4 py-2 text-gray-900">
-                          {data.bmi.toFixed(1)}
+                    {body.length > 0 ? (
+                      body.map((data, idx) => (
+                        <tr key={idx} className="hover:bg-gray-50">
+                          <td className="px-4 py-2 text-gray-900">
+                            {data.createdAt ? new Date(data.createdAt).toLocaleDateString() : "N/A"}
+                          </td>
+                          <td className="px-4 py-2 text-gray-900">
+                            {data.weightKg || 0}
+                          </td>
+                          <td className="px-4 py-2 text-gray-900">
+                            {data.heightCm || 0}
+                          </td>
+                          <td className="px-4 py-2 text-gray-900">
+                            {data.bmi ? data.bmi.toFixed(1) : "N/A"}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                          No body data available
                         </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -468,9 +545,11 @@ export function UserDetailPage({ user, onBack }: UserDetailProps) {
             </div>
 
             <div>
-              <h3 className="text-lg font-bold text-gray-900 mb-3">
-                Training Plans History
-              </h3>
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-lg font-bold text-gray-900">
+                  Training Plans History
+                </h3>
+              </div>
               <div className="space-y-3">
                 {usertraining.map((plan) => (
                   <div
@@ -481,17 +560,73 @@ export function UserDetailPage({ user, onBack }: UserDetailProps) {
                       <h4 className="font-semibold text-gray-900">
                         {plan.name}
                       </h4>
-                      <span
-                        className={`px-2 py-1 rounded text-xs font-medium capitalize ${
-                          plan.status === "active"
-                            ? "bg-blue-100 text-blue-800"
-                            : plan.status === "completed"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-gray-100 text-gray-800"
-                        }`}
-                      >
-                        {plan.status}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-medium capitalize ${
+                            plan.status === "active"
+                              ? "bg-blue-100 text-blue-800"
+                              : plan.status === "completed"
+                              ? "bg-green-100 text-green-800"
+                              : "bg-gray-100 text-gray-800"
+                          }`}
+                        >
+                          {plan.status}
+                        </span>
+                        <button
+                          onClick={async () => {
+                            try {
+                              setSelectedPlanId(plan.id);
+                              const response = await client.get(
+                                `/admin/training-plan-details/${plan.id}`
+                              );
+                              const details = response.data?.data || [];
+                              
+                              // Map backend response (tpdId) to frontend format (id)
+                              const mappedDetails: TrainingPlanDetail[] = details.map((detail: any) => ({
+                                id: detail.id || detail.tpdId, // Use id if exists, otherwise use tpdId
+                                trainingPlanId: detail.trainingPlanId,
+                                dayNumber: detail.dayNumber,
+                                dayName: `Day ${detail.dayNumber}`,
+                                challengeId: detail.challenge?.id || detail.challengeId || 0,
+                                challengeName: detail.challengeName || detail.challenge?.title || "",
+                                sets: detail.sets || 0,
+                                reps: detail.reps || 0,
+                                duration: detail.duration,
+                                restTime: detail.restTime,
+                                instructions: detail.instructions,
+                              }));
+                              
+                              setPlanDetails(mappedDetails);
+                              setIsEditingPlan(true);
+                              // Initialize editing state
+                              const editingState: { [key: number]: TrainingPlanDetail } = {};
+                              mappedDetails.forEach((detail: TrainingPlanDetail) => {
+                                if (detail.id) {
+                                  editingState[detail.id] = { ...detail };
+                                }
+                              });
+                              setEditingDetails(editingState);
+                              
+                              // Load challenges for dropdown
+                              try {
+                                const challengesRes = await challengeAPI.getAll();
+                                const challengesData = challengesRes.data?.data || challengesRes.data || [];
+                                setChallenges(Array.isArray(challengesData) ? challengesData : []);
+                              } catch (err) {
+                                console.error("Error loading challenges:", err);
+                                setChallenges([]);
+                              }
+                            } catch (error) {
+                              console.error("Error loading plan details:", error);
+                              alert("Không thể tải chi tiết training plan");
+                            }
+                          }}
+                          className="p-2 hover:bg-blue-100 rounded text-blue-600 transition"
+                          title="Edit Training Plan Details"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                      </div>
                     </div>
                     <p className="text-sm text-gray-600 mb-2">
                       {new Date(plan.startDate).toLocaleDateString()} →{" "}
@@ -510,6 +645,664 @@ export function UserDetailPage({ user, onBack }: UserDetailProps) {
                 ))}
               </div>
             </div>
+            
+            {/* Edit Training Plan Details Modal */}
+            {isEditingPlan && selectedPlanId && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                  {/* Header */}
+                  <div className="flex items-center justify-between p-6 border-b">
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-900">
+                        Edit Training Plan Details
+                      </h2>
+                      <p className="text-sm text-gray-600 mt-1">
+                        User: {user.fullName} | Plan ID: {selectedPlanId}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setIsEditingPlan(false);
+                        setSelectedPlanId(null);
+                        setPlanDetails([]);
+                        setEditingDetails({});
+                      }}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition"
+                    >
+                      <X size={24} className="text-gray-600" />
+                    </button>
+                  </div>
+                  
+                  {/* Content */}
+                  <div className="flex-1 overflow-y-auto p-6">
+                    {planDetails.length === 0 ? (
+                      <div className="text-center py-8">
+                        <p className="text-gray-500">No training plan details found</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {/* Group by day */}
+                        {Object.entries(
+                          planDetails.reduce((acc, detail) => {
+                            const dayKey = `Day ${detail.dayNumber}`;
+                            if (!acc[dayKey]) {
+                              acc[dayKey] = [];
+                            }
+                            acc[dayKey].push(detail);
+                            return acc;
+                          }, {} as { [key: string]: TrainingPlanDetail[] })
+                        ).map(([dayKey, details]) => {
+                          const dayNumber = parseInt(dayKey.replace("Day ", ""));
+                          return (
+                          <div key={dayKey} className="border rounded-lg p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <h3 className="font-semibold text-gray-900">{dayKey}</h3>
+                              <button
+                                onClick={() => {
+                                  setAddingDay(dayNumber);
+                                  setNewDetail({
+                                    dayNumber: dayNumber,
+                                    challengeId: 0,
+                                    challengeName: "",
+                                    sets: 0,
+                                    reps: 0,
+                                    duration: undefined,
+                                    instructions: "",
+                                  });
+                                }}
+                                className="px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-1"
+                              >
+                                <Plus size={14} />
+                                Add Detail
+                              </button>
+                            </div>
+                            <div className="space-y-3">
+                              {details.map((detail) => {
+                                const editing = editingDetails[detail.id];
+                                if (!editing) return null;
+                                
+                                return (
+                                  <div key={detail.id} className="bg-gray-50 rounded-lg p-4 border">
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                      <div>
+                                        <label className="text-xs text-gray-600 uppercase mb-1 block">
+                                          Challenge
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={editing.challengeName || ""}
+                                          onChange={(e) => {
+                                            setEditingDetails({
+                                              ...editingDetails,
+                                              [detail.id]: {
+                                                ...editing,
+                                                challengeName: e.target.value,
+                                              },
+                                            });
+                                          }}
+                                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="text-xs text-gray-600 uppercase mb-1 block">
+                                          Sets
+                                        </label>
+                                        <input
+                                          type="number"
+                                          value={editing.sets || 0}
+                                          onChange={(e) => {
+                                            setEditingDetails({
+                                              ...editingDetails,
+                                              [detail.id]: {
+                                                ...editing,
+                                                sets: parseInt(e.target.value) || 0,
+                                              },
+                                            });
+                                          }}
+                                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="text-xs text-gray-600 uppercase mb-1 block">
+                                          Reps
+                                        </label>
+                                        <input
+                                          type="number"
+                                          value={editing.reps || 0}
+                                          onChange={(e) => {
+                                            setEditingDetails({
+                                              ...editingDetails,
+                                              [detail.id]: {
+                                                ...editing,
+                                                reps: parseInt(e.target.value) || 0,
+                                              },
+                                            });
+                                          }}
+                                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="text-xs text-gray-600 uppercase mb-1 block">
+                                          Duration (sec)
+                                        </label>
+                                        <input
+                                          type="number"
+                                          value={editing.duration || ""}
+                                          onChange={(e) => {
+                                            setEditingDetails({
+                                              ...editingDetails,
+                                              [detail.id]: {
+                                                ...editing,
+                                                duration: parseInt(e.target.value) || undefined,
+                                              },
+                                            });
+                                          }}
+                                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                                          placeholder="Optional"
+                                        />
+                                      </div>
+                                    </div>
+                                    {editing.instructions !== undefined && (
+                                      <div className="mt-3">
+                                        <label className="text-xs text-gray-600 uppercase mb-1 block">
+                                          Instructions
+                                        </label>
+                                        <textarea
+                                          value={editing.instructions || ""}
+                                          onChange={(e) => {
+                                            setEditingDetails({
+                                              ...editingDetails,
+                                              [detail.id]: {
+                                                ...editing,
+                                                instructions: e.target.value,
+                                              },
+                                            });
+                                          }}
+                                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                                          rows={2}
+                                          placeholder="Optional instructions"
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                              
+                              {/* Add New Detail Form */}
+                              {addingDay === dayNumber && newDetail && (
+                                <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <h4 className="font-semibold text-blue-900">Add New Training Detail</h4>
+                                    <button
+                                      onClick={() => {
+                                        setAddingDay(null);
+                                        setNewDetail(null);
+                                      }}
+                                      className="p-1 hover:bg-blue-200 rounded text-blue-700"
+                                    >
+                                      <X size={16} />
+                                    </button>
+                                  </div>
+                                  
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                                    <div>
+                                      <label className="text-xs text-gray-600 uppercase mb-1 block">
+                                        Challenge *
+                                      </label>
+                                      <select
+                                        value={newDetail.challengeId}
+                                        onChange={(e) => {
+                                          const selectedChallenge = challenges.find(
+                                            (c) => c.id === parseInt(e.target.value)
+                                          );
+                                          setNewDetail({
+                                            ...newDetail,
+                                            challengeId: parseInt(e.target.value) || 0,
+                                            challengeName: selectedChallenge?.title || selectedChallenge?.name || "",
+                                          });
+                                        }}
+                                        className="w-full px-3 py-2 border rounded-lg text-sm"
+                                        required
+                                      >
+                                        <option value={0}>Select Challenge</option>
+                                        {challenges.map((challenge) => (
+                                          <option key={challenge.id} value={challenge.id}>
+                                            {challenge.title || challenge.name || `Challenge ${challenge.id}`}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-600 uppercase mb-1 block">
+                                        Sets *
+                                      </label>
+                                      <input
+                                        type="number"
+                                        value={newDetail.sets || ""}
+                                        onChange={(e) => {
+                                          setNewDetail({
+                                            ...newDetail,
+                                            sets: parseInt(e.target.value) || 0,
+                                          });
+                                        }}
+                                        className="w-full px-3 py-2 border rounded-lg text-sm"
+                                        required
+                                        min="1"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-600 uppercase mb-1 block">
+                                        Reps *
+                                      </label>
+                                      <input
+                                        type="number"
+                                        value={newDetail.reps || ""}
+                                        onChange={(e) => {
+                                          setNewDetail({
+                                            ...newDetail,
+                                            reps: parseInt(e.target.value) || 0,
+                                          });
+                                        }}
+                                        className="w-full px-3 py-2 border rounded-lg text-sm"
+                                        required
+                                        min="1"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-600 uppercase mb-1 block">
+                                        Duration (sec)
+                                      </label>
+                                      <input
+                                        type="number"
+                                        value={newDetail.duration || ""}
+                                        onChange={(e) => {
+                                          setNewDetail({
+                                            ...newDetail,
+                                            duration: parseInt(e.target.value) || undefined,
+                                          });
+                                        }}
+                                        className="w-full px-3 py-2 border rounded-lg text-sm"
+                                        placeholder="Optional"
+                                        min="0"
+                                      />
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="mb-3">
+                                    <label className="text-xs text-gray-600 uppercase mb-1 block">
+                                      Instructions
+                                    </label>
+                                    <textarea
+                                      value={newDetail.instructions || ""}
+                                      onChange={(e) => {
+                                        setNewDetail({
+                                          ...newDetail,
+                                          instructions: e.target.value,
+                                        });
+                                      }}
+                                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                                      rows={2}
+                                      placeholder="Optional instructions"
+                                    />
+                                  </div>
+                                  
+                                  <div className="flex gap-2">
+                                    <Button
+                                      onClick={async () => {
+                                        if (!newDetail.challengeId || !newDetail.sets || !newDetail.reps) {
+                                          alert("Please fill in all required fields (Challenge, Sets, Reps)");
+                                          return;
+                                        }
+                                        
+                                        try {
+                                          const response = await client.post(
+                                            `/admin/training-plan-details`,
+                                            {
+                                              trainingPlanId: selectedPlanId,
+                                              dayNumber: newDetail.dayNumber,
+                                              challengeId: newDetail.challengeId,
+                                              sets: newDetail.sets,
+                                              reps: newDetail.reps,
+                                              duration: newDetail.duration,
+                                              restTime: undefined,
+                                              instructions: newDetail.instructions,
+                                            }
+                                          );
+                                          
+                                          if (response.data?.success) {
+                                            // Reload plan details
+                                            const detailsResponse = await client.get(
+                                              `/admin/training-plan-details/${selectedPlanId}`
+                                            );
+                                            const updatedDetails = detailsResponse.data?.data || [];
+                                            setPlanDetails(updatedDetails);
+                                            
+                                            // Update editing state
+                                            const editingState: { [key: number]: TrainingPlanDetail } = {};
+                                            updatedDetails.forEach((detail: TrainingPlanDetail) => {
+                                              editingState[detail.id] = { ...detail };
+                                            });
+                                            setEditingDetails(editingState);
+                                            
+                                            // Reset form
+                                            setAddingDay(null);
+                                            setNewDetail(null);
+                                            
+                                            alert("Training plan detail added successfully!");
+                                          } else {
+                                            alert(response.data?.message || "Error adding detail");
+                                          }
+                                        } catch (error: any) {
+                                          console.error("Error adding detail:", error);
+                                          alert(error?.response?.data?.message || "Error adding training plan detail");
+                                        }
+                                      }}
+                                      className="bg-blue-600 hover:bg-blue-700"
+                                    >
+                                      <Plus size={14} className="mr-1" />
+                                      Add Detail
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      onClick={() => {
+                                        setAddingDay(null);
+                                        setNewDetail(null);
+                                      }}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )})}
+                        
+                        {/* Add New Day Section */}
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                          <button
+                            onClick={() => {
+                              // Find max day number
+                              const maxDay = planDetails.length > 0
+                                ? Math.max(...planDetails.map(d => d.dayNumber))
+                                : 0;
+                              const newDayNumber = maxDay + 1;
+                              
+                              setAddingDay(newDayNumber);
+                              setNewDetail({
+                                dayNumber: newDayNumber,
+                                challengeId: 0,
+                                challengeName: "",
+                                sets: 0,
+                                reps: 0,
+                                duration: undefined,
+                                instructions: "",
+                              });
+                            }}
+                            className="w-full py-3 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition flex items-center justify-center gap-2"
+                          >
+                            <Plus size={18} />
+                            Add New Day
+                          </button>
+                          
+                          {addingDay && addingDay > Math.max(...(planDetails.length > 0 ? planDetails.map(d => d.dayNumber) : [0])) && newDetail && (
+                            <div className="mt-4 bg-blue-50 border-2 border-blue-300 rounded-lg p-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <h4 className="font-semibold text-blue-900">Add New Day {newDetail.dayNumber}</h4>
+                                <button
+                                  onClick={() => {
+                                    setAddingDay(null);
+                                    setNewDetail(null);
+                                  }}
+                                  className="p-1 hover:bg-blue-200 rounded text-blue-700"
+                                >
+                                  <X size={16} />
+                                </button>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                                <div>
+                                  <label className="text-xs text-gray-600 uppercase mb-1 block">
+                                    Challenge *
+                                  </label>
+                                  <select
+                                    value={newDetail.challengeId}
+                                    onChange={(e) => {
+                                      const selectedChallenge = challenges.find(
+                                        (c) => c.id === parseInt(e.target.value)
+                                      );
+                                      setNewDetail({
+                                        ...newDetail,
+                                        challengeId: parseInt(e.target.value) || 0,
+                                        challengeName: selectedChallenge?.title || selectedChallenge?.name || "",
+                                      });
+                                    }}
+                                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                                    required
+                                  >
+                                    <option value={0}>Select Challenge</option>
+                                    {challenges.map((challenge) => (
+                                      <option key={challenge.id} value={challenge.id}>
+                                        {challenge.title || challenge.name || `Challenge ${challenge.id}`}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-xs text-gray-600 uppercase mb-1 block">
+                                    Sets *
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={newDetail.sets || ""}
+                                    onChange={(e) => {
+                                      setNewDetail({
+                                        ...newDetail,
+                                        sets: parseInt(e.target.value) || 0,
+                                      });
+                                    }}
+                                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                                    required
+                                    min="1"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs text-gray-600 uppercase mb-1 block">
+                                    Reps *
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={newDetail.reps || ""}
+                                    onChange={(e) => {
+                                      setNewDetail({
+                                        ...newDetail,
+                                        reps: parseInt(e.target.value) || 0,
+                                      });
+                                    }}
+                                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                                    required
+                                    min="1"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs text-gray-600 uppercase mb-1 block">
+                                    Duration (sec)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={newDetail.duration || ""}
+                                    onChange={(e) => {
+                                      setNewDetail({
+                                        ...newDetail,
+                                        duration: parseInt(e.target.value) || undefined,
+                                      });
+                                    }}
+                                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                                    placeholder="Optional"
+                                    min="0"
+                                  />
+                                </div>
+                              </div>
+                              
+                              <div className="mb-3">
+                                <label className="text-xs text-gray-600 uppercase mb-1 block">
+                                  Instructions
+                                </label>
+                                <textarea
+                                  value={newDetail.instructions || ""}
+                                  onChange={(e) => {
+                                    setNewDetail({
+                                      ...newDetail,
+                                      instructions: e.target.value,
+                                    });
+                                  }}
+                                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                                  rows={2}
+                                  placeholder="Optional instructions"
+                                />
+                              </div>
+                              
+                              <div className="flex gap-2">
+                                <Button
+                                  onClick={async () => {
+                                    if (!newDetail.challengeId || !newDetail.sets || !newDetail.reps) {
+                                      alert("Please fill in all required fields (Challenge, Sets, Reps)");
+                                      return;
+                                    }
+                                    
+                                    try {
+                                      const response = await client.post(
+                                        `/admin/training-plan-details`,
+                                        {
+                                          trainingPlanId: selectedPlanId,
+                                          dayNumber: newDetail.dayNumber,
+                                          challengeId: newDetail.challengeId,
+                                          sets: newDetail.sets,
+                                          reps: newDetail.reps,
+                                          duration: newDetail.duration,
+                                          restTime: undefined,
+                                          instructions: newDetail.instructions,
+                                        }
+                                      );
+                                      
+                                      if (response.data?.success) {
+                                        // Reload plan details
+                                        const detailsResponse = await client.get(
+                                          `/admin/training-plan-details/${selectedPlanId}`
+                                        );
+                                        const updatedDetails = detailsResponse.data?.data || [];
+                                        setPlanDetails(updatedDetails);
+                                        
+                                        // Update editing state
+                                        const editingState: { [key: number]: TrainingPlanDetail } = {};
+                                        updatedDetails.forEach((detail: TrainingPlanDetail) => {
+                                          editingState[detail.id] = { ...detail };
+                                        });
+                                        setEditingDetails(editingState);
+                                        
+                                        // Reset form
+                                        setAddingDay(null);
+                                        setNewDetail(null);
+                                        
+                                        alert("Training plan detail added successfully!");
+                                      } else {
+                                        alert(response.data?.message || "Error adding detail");
+                                      }
+                                    } catch (error: any) {
+                                      console.error("Error adding detail:", error);
+                                      alert(error?.response?.data?.message || "Error adding training plan detail");
+                                    }
+                                  }}
+                                  className="bg-blue-600 hover:bg-blue-700"
+                                >
+                                  <Plus size={14} className="mr-1" />
+                                  Add Detail
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    setAddingDay(null);
+                                    setNewDetail(null);
+                                  }}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Footer */}
+                  <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setIsEditingPlan(false);
+                        setSelectedPlanId(null);
+                        setPlanDetails([]);
+                        setEditingDetails({});
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={async () => {
+                        try {
+                          // Filter out details without valid ID and save all edited details
+                          const validDetails = Object.values(editingDetails).filter(
+                            (detail) => detail.id && detail.id > 0
+                          );
+                          
+                          if (validDetails.length === 0) {
+                            alert("No valid details to save");
+                            return;
+                          }
+                          
+                          const savePromises = validDetails.map((detail) => {
+                            if (!detail.id) {
+                              console.warn("Detail missing ID:", detail);
+                              return Promise.resolve();
+                            }
+                            
+                            return client.put(`/admin/training-plan-details/${detail.id}`, {
+                              trainingPlanId: detail.trainingPlanId,
+                              dayNumber: detail.dayNumber,
+                              challengeId: detail.challengeId,
+                              sets: detail.sets,
+                              reps: detail.reps,
+                              duration: detail.duration,
+                              restTime: detail.restTime,
+                              instructions: detail.instructions,
+                            });
+                          });
+                          
+                          await Promise.all(savePromises);
+                          alert("Training plan details updated successfully!");
+                          setIsEditingPlan(false);
+                          setSelectedPlanId(null);
+                          setPlanDetails([]);
+                          setEditingDetails({});
+                          
+                          // Reload training plans
+                          const res_training = await trainingPlanAPI.getById(user.id);
+                          setUserTraining(res_training.data.data ?? []);
+                        } catch (error: any) {
+                          console.error("Error saving plan details:", error);
+                          alert(error?.response?.data?.message || "Error saving training plan details");
+                        }
+                      }}
+                      className="flex items-center gap-2"
+                    >
+                      <Save size={16} />
+                      Save Changes
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

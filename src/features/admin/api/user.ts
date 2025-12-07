@@ -29,7 +29,7 @@ export const userApi = {
 
   // Delete user
   deleteUser(id: number) {
-    return client.delete(`/auth/users/${id}`);
+    return client.delete(`/admin/users/${id}`);
   },
 
   // Update user status (optional - if your API supports this)

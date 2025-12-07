@@ -1,10 +1,10 @@
 // src/pages/admin/MealsPage.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
-import { SimpleInput as Input } from "@/components_1/ui/simple-input";
-import { SimpleModal } from "@/components_1/ui/simple-modal";
-import { SimpleSelect } from "@/components_1/ui/simple-select";
-import { FormField } from "@/components_1/ui/form-field";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
+import { SimpleInput as Input } from "@/components/ui/simple-input";
+import { SimpleModal } from "@/components/ui/simple-modal";
+import { SimpleSelect } from "@/components/ui/simple-select";
+import { FormField } from "@/components/ui/form-field";
 import { Plus, Search, AlertCircle, Trash, Edit, PlusCircle, Apple } from "lucide-react";
 
 import { mealAPI } from "../api/adminAPI";
@@ -16,6 +16,7 @@ import {
   MealFoodResponse,
   FoodOption,
 } from "../types/admin-entities";
+import { extractDataFromResponse } from "../utils/responseHelper";
 
 type ModalMode = "create" | "edit";
 
@@ -57,12 +58,12 @@ export  function MealsPage() {
       setLoading(true);
       setError(null);
       const res = await mealAPI.getAll();
-      // backend might wrap in { data: ... } or return array; normalize:
-      const data = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
+      // Extract data using helper function
+      const data = extractDataFromResponse<MealResponse>(res);
       setMeals(data);
     } catch (e: any) {
       console.error(e);
-      setError("Không thể tải danh sách meals");
+      setError(e?.response?.data?.message || e?.message || "Không thể tải danh sách meals");
     } finally {
       setLoading(false);
     }
@@ -71,9 +72,10 @@ export  function MealsPage() {
   const fetchFoods = async () => {
     try {
       const res = await foodAPI.getAll();
-      const data = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
+      // Extract data using helper function
+      const data = extractDataFromResponse<FoodOption>(res);
       setFoods(data);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
       // foods optional; ignore error but show console
     }

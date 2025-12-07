@@ -1,33 +1,56 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { Trophy, Zap, Target, TrendingUp, Settings } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Trophy, Zap, Target, TrendingUp, Settings, Scale } from "lucide-react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { getUserFullProfile } from "../api/profileService";
 import { ProfileDTO } from "../userProfile.type";
+import { UserInfoAPI, UserInfoDTO } from "../../../api/userInfo.api";
+import { Button } from "../../../components/ui/button";
 
 export const Profile = () => {
   const { user: authUser } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [profile, setProfile] = useState<ProfileDTO | null>(null);
+  const [userInfo, setUserInfo] = useState<UserInfoDTO | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Load API
+  // Load API - reload when location changes (user navigates back from body-record)
   useEffect(() => {
     if (!authUser?.id) return;
 
     const loadData = async () => {
       try {
-        const data = await getUserFullProfile(authUser.id);
-        setProfile(data);
+        setLoading(true);
+        console.log("📤 [Profile] Loading profile data...");
+        const [profileData, userInfoResponse] = await Promise.all([
+          getUserFullProfile(authUser.id),
+          UserInfoAPI.getUserInfo().catch((err) => {
+            console.log("⚠️ [Profile] No user info found or error:", err);
+            return null;
+          })
+        ]);
+        setProfile(profileData);
+        
+        // Axios wraps response in data, so extract from response.data.data
+        const userInfoData = userInfoResponse?.data?.data ?? userInfoResponse?.data;
+        if (userInfoData) {
+          console.log("✅ [Profile] User info loaded:", userInfoData);
+          setUserInfo(userInfoData);
+        } else {
+          console.log("ℹ️ [Profile] No user info data available");
+          setUserInfo(null); // Reset nếu không có data
+        }
       } catch (err) {
-        console.error("Failed to load profile", err);
+        console.error("❌ [Profile] Failed to load profile", err);
       } finally {
         setLoading(false);
       }
     };
 
     loadData();
-  }, [authUser]);
+  }, [authUser, location.key]); // Reload when location changes (user navigates back)
 
   // Loading skeleton
   if (loading) {
@@ -120,6 +143,84 @@ export const Profile = () => {
 
           {/* RIGHT COLUMN */}
           <div className="space-y-6">
+            {/* Body Information */}
+            <div className="bg-white rounded-xl shadow-md p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Scale className="w-6 h-6 text-sky-500" />
+                <h2 className="text-xl text-gray-900">Body Information</h2>
+              </div>
+
+              {userInfo ? (
+                <>
+                  <div className="space-y-3 mb-4">
+                    <InfoRow label="Height" value={`${userInfo.heightCm || 0} cm`} />
+                    <InfoRow label="Weight" value={`${userInfo.weightKg || 0} kg`} />
+                    <InfoRow label="Age" value={`${userInfo.age || 0} years`} />
+                    <InfoRow label="Gender" value={userInfo.gender || "N/A"} />
+                    {userInfo.bmi && (
+                      <InfoRow label="BMI" value={userInfo.bmi.toFixed(2)} />
+                    )}
+                    {userInfo.bmr && (
+                      <InfoRow label="BMR" value={`${userInfo.bmr.toFixed(0)} kcal/day`} />
+                    )}
+                    {userInfo.recommendedCalories && (
+                      <InfoRow 
+                        label="Recommended Calories" 
+                        value={`${userInfo.recommendedCalories.toFixed(0)} kcal/day`} 
+                      />
+                    )}
+                    {userInfo.bodyFatPct && (
+                      <InfoRow label="Body Fat" value={`${userInfo.bodyFatPct.toFixed(1)}%`} />
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => navigate("/profile/body-profile")}
+                      className="flex-1"
+                      variant="default"
+                    >
+                      Body Profile
+                    </Button>
+                    <Button
+                      onClick={() => navigate("/profile/body-record")}
+                      className="flex-1"
+                      variant="outline"
+                    >
+                      Update Metrics
+                    </Button>
+                    <Button
+                      onClick={() => navigate("/profile/body-progress")}
+                      className="flex-1"
+                      variant="outline"
+                    >
+                      <TrendingUp className="w-4 h-4 mr-2" />
+                      Progress
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-gray-500 mb-4">Chưa có thông tin body</p>
+                  <div className="space-y-2">
+                    <Button
+                      onClick={() => navigate("/profile/body-profile")}
+                      className="w-full"
+                      variant="default"
+                    >
+                      Complete Body Profile
+                    </Button>
+                    <Button
+                      onClick={() => navigate("/profile/body-record")}
+                      className="w-full"
+                      variant="outline"
+                    >
+                      Update Metrics
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Goals */}
             <div className="bg-white rounded-xl shadow-md p-6">
               <div className="flex items-center gap-2 mb-4">
@@ -203,5 +304,17 @@ const GoalItem = ({ label, value }: GoalItemProps) => (
         style={{ width: `${Math.min(Number(value) || 0, 100)}%` }}
       />
     </div>
+  </div>
+);
+
+interface InfoRowProps {
+  label: string;
+  value: string;
+}
+
+const InfoRow = ({ label, value }: InfoRowProps) => (
+  <div className="flex justify-between items-center py-2 border-b border-gray-100 last:border-0">
+    <span className="text-gray-600">{label}</span>
+    <span className="text-gray-900 font-medium">{value}</span>
   </div>
 );

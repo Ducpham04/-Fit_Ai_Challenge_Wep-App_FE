@@ -8,6 +8,7 @@ interface ChallengeDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUpload: (file: File) => Promise<void>;
+  onComplete?: (challengeId: number, userChallengeId?: number) => Promise<void>;
   isLoading?: boolean;
   trainingPlanId?: number | string;
 }
@@ -17,11 +18,13 @@ export const ChallengeDetailModal: React.FC<ChallengeDetailModalProps> = ({
   isOpen,
   onClose,
   onUpload,
+  onComplete,
   isLoading = false,
   trainingPlanId,
 }) => {
   const [activeTab, setActiveTab] = useState<'info' | 'counter'>('info');
   const [isUploading, setIsUploading] = useState(false);
+  const [userChallengeId, setUserChallengeId] = useState<number | undefined>(undefined);
 
   if (!isOpen) return null;
 
@@ -51,23 +54,89 @@ export const ChallengeDetailModal: React.FC<ChallengeDetailModalProps> = ({
     }
   };
 
-  const handleAnalysisComplete = async (analysis: AIAnalysisResult) => {
+  const handleAnalysisComplete = async (analysis: AIAnalysisResult & { userChallengeId?: number }) => {
     setIsUploading(true);
     try {
-      // Create a mock file object from the analysis
-      const blob = new Blob([JSON.stringify(analysis)], { type: 'application/json' });
-      const file = new File([blob], 'analysis.json');
-      await onUpload(file);
+      // Lưu userChallengeId nếu có trong response
+      if (analysis.userChallengeId) {
+        setUserChallengeId(analysis.userChallengeId);
+      }
+
+      // Tính target total reps
+      const targetTotalReps = challenge.reps * challenge.sets;
+      
+      // Kiểm tra lại: đạt yêu cầu nếu correctReps >= targetTotalReps
+      const isPassed = analysis.correctReps >= targetTotalReps;
+
+      console.log('✅ [MOCK] Analysis complete:', {
+        challengeName: challenge.challengeName,
+        targetReps: challenge.reps,
+        targetSets: challenge.sets,
+        targetTotalReps: targetTotalReps,
+        correctReps: analysis.correctReps,
+        isPassed: isPassed,
+        accuracy: (analysis.accuracy * 100).toFixed(1) + '%',
+        requirement: `correctReps (${analysis.correctReps}) >= targetTotalReps (${targetTotalReps})`,
+      });
+
+      // Nếu phân tích thành công và đạt target, đánh dấu hoàn thành
+      if (isPassed && onComplete) {
+        try {
+          console.log('🎉 Challenge PASSED - Marking as COMPLETED:', {
+            challengeId: challenge.challengeId,
+            challengeName: challenge.challengeName,
+            correctReps: analysis.correctReps,
+            targetTotalReps: targetTotalReps,
+            userChallengeId: analysis.userChallengeId,
+          });
+          
+          // Gọi onComplete để update UI (không gọi API trong mock mode)
+          await onComplete(challenge.challengeId, analysis.userChallengeId);
+          
+          console.log('✅ Challenge marked as COMPLETED successfully');
+        } catch (error) {
+          console.warn('⚠️ Could not mark challenge as completed:', error);
+        }
+      } else if (!isPassed) {
+        console.log('⚠️ Challenge not passed yet:', {
+          challengeId: challenge.challengeId,
+          correctReps: analysis.correctReps,
+          targetTotalReps: targetTotalReps,
+          needed: targetTotalReps - analysis.correctReps,
+        });
+      }
     } catch (error) {
-      console.error('Upload failed:', error);
+      console.error('Analysis complete handler failed:', error);
     } finally {
       setIsUploading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+      style={{ 
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        overflow: 'auto'
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div 
+        className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl"
+        style={{
+          margin: 'auto',
+          position: 'relative',
+          zIndex: 1000
+        }}
+      >
         {/* Header */}
         <div className="sticky top-0 flex items-center justify-between p-6 border-b border-gray-200 bg-white z-10">
           <div className="flex-1">
@@ -156,7 +225,7 @@ export const ChallengeDetailModal: React.FC<ChallengeDetailModalProps> = ({
                   </h3>
                   <div className="bg-gray-900 rounded-lg overflow-hidden aspect-video">
                     <video
-                      src={challenge.videoUrl}
+                      src=  { challenge.videoUrl}
                       controls
                       className="w-full h-full"
                     />

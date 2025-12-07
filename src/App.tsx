@@ -1,5 +1,5 @@
 import { AppRouter } from "./router";
-import { Toaster } from "./components_1/ui/sonner";
+import { Toaster } from "./components/ui/sonner";
 import { AuthProvider } from "./context/AuthContext";
 import { ChallengeProvider } from "./context/ChallengeContext";
 import "./index.css";

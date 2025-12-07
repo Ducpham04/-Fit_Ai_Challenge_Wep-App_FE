@@ -1,5 +1,5 @@
 import { useState, ReactNode } from "react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
 import {
   Users,
   Dumbbell,

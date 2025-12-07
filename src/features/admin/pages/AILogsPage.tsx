@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
+import { SimpleModal } from "@/components/ui/simple-modal";
 import { Bot, Search, AlertCircle, Eye, Download } from "lucide-react";
-import { FormField } from "@/components_1/ui/form-field";
+import { FormField } from "@/components/ui/form-field";
 
 interface AILog {
   id: number;
@@ -59,19 +60,6 @@ const MOCK_LOGS: AILog[] = [
   },
 ];
 
-function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50" onClick={onClose}></div>
-      <div
-        className="bg-white p-8 rounded-xl w-[600px] max-w-[90%] shadow-2xl relative z-10 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
 
 export function AILogsPage() {
   const [logs, setLogs] = useState<AILog[]>(MOCK_LOGS);
@@ -324,9 +312,19 @@ export function AILogsPage() {
 
       {/* Detail Modal */}
       {selectedLog && (
-        <Modal onClose={() => setSelectedLog(null)}>
-          <h2 className="text-xl font-bold mb-6">AI Prediction Details</h2>
-
+        <SimpleModal
+          isOpen={Boolean(selectedLog)}
+          onClose={() => setSelectedLog(null)}
+          title="AI Prediction Details"
+          className="max-w-2xl max-h-[90vh] overflow-y-auto"
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setSelectedLog(null)}>
+                Close
+              </Button>
+            </div>
+          }
+        >
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -379,13 +377,7 @@ export function AILogsPage() {
               <p className="text-sm text-gray-600">{new Date(selectedLog.createdAt).toLocaleString()}</p>
             </div>
           </div>
-
-          <div className="mt-6 flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setSelectedLog(null)}>
-              Close
-            </Button>
-          </div>
-        </Modal>
+        </SimpleModal>
       )}
     </main>
   );

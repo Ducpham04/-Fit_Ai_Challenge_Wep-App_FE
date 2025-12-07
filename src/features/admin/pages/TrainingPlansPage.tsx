@@ -1,18 +1,20 @@
 import { useMemo, useState, useEffect } from "react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
 import { Plus, Dumbbell, BookOpen, Search, AlertCircle } from "lucide-react";
-import { SimpleInput as Input } from "@/components_1/ui/simple-input";
-import { SimpleModal } from "@/components_1/ui/simple-modal";
-import { SimpleSelect } from "@/components_1/ui/simple-select";
-import { FormField } from "@/components_1/ui/form-field";
+import { SimpleInput as Input } from "@/components/ui/simple-input";
+import { SimpleModal } from "@/components/ui/simple-modal";
+import { SimpleSelect } from "@/components/ui/simple-select";
+import { FormField } from "@/components/ui/form-field";
+import { SimpleTextarea as Textarea } from "@/components/ui/simple-textarea";
 import { goalAPI, trainingPlanAPI } from "../api/adminAPI";
 import {
   AdminTrainingPlan,
   TrainingPlanPayload,
 } from "../types/admin-entities";
 import { TrainingPlanDetailsPage } from "./TrainingPlanDetailsPage";
+import { extractDataFromResponse, isResponseSuccess, getErrorMessage } from "../utils/responseHelper";
 
-const EMPTY_PLAN: TrainingPlanPayload = {
+const EMPTY_PLAN: TrainingPlanPayload & { description?: string } = {
   title: "",
   durationWeeks: "",
   difficultyLevel: "beginner",
@@ -23,6 +25,7 @@ const EMPTY_PLAN: TrainingPlanPayload = {
   goalId: 0,
   goalName: "",
   createAt: new Date().toISOString().slice(0, 10),
+  description: "",
 };
 
 type ModalMode = "create" | "edit";
@@ -44,7 +47,7 @@ export function TrainingPlansPage() {
     open: false,
     mode: "create",
   });
-  const [form, setForm] = useState<TrainingPlanPayload>(EMPTY_PLAN);
+  const [form, setForm] = useState<TrainingPlanPayload & { description?: string }>(EMPTY_PLAN);
   const [deleteTarget, setDeleteTarget] = useState<AdminTrainingPlan | null>(
     null
   );
@@ -87,20 +90,34 @@ export function TrainingPlansPage() {
       console.log("📤 [TrainingPlansPage] Fetching training plans...");
       const response = await trainingPlanAPI.getAll();
       console.log("✅ [TrainingPlansPage] Full response:", response);
-      let data = [];
-      if (Array.isArray(response.data)) {
-        data = response.data;
-      } else if (Array.isArray(response.data?.data)) {
-        data = response.data.data;
-      }
-      console.log("📋 [TrainingPlansPage] Extracted data:", data);
-      setTrainingPlans(Array.isArray(data) ? data : []);
+      
+      // Extract data using helper function
+      const rawData = extractDataFromResponse<any>(response);
+      console.log("📋 [TrainingPlansPage] Extracted data:", rawData);
+      
+      // Map backend response (tpId) to frontend format (id)
+      const data: AdminTrainingPlan[] = rawData.map((plan: any) => {
+        const mappedPlan = {
+          ...plan,
+          id: plan.tpId || plan.id, // Backend uses tpId, prioritize tpId over id
+        };
+        console.log("📋 [TrainingPlansPage] Mapped plan:", {
+          original: plan,
+          mapped: mappedPlan,
+          tpId: plan.tpId,
+          id: plan.id,
+          finalId: mappedPlan.id
+        });
+        return mappedPlan;
+      });
+      
+      setTrainingPlans(data);
     } catch (error: any) {
       console.error(
         "❌ [TrainingPlansPage] Error fetching training plans:",
         error
       );
-      setError(error?.message || "Không thể tải danh sách training plans");
+      setError(error?.response?.data?.message || error?.message || "Không thể tải danh sách training plans");
     } finally {
       setLoading(false);
     }
@@ -161,10 +178,39 @@ export function TrainingPlansPage() {
 
   const handleDelete = async (id: number) => {
     try {
+      setSubmitLoading(true);
       setError(null);
+      
+      // Ensure we have a valid ID
+      if (!id || id === 0) {
+        setError("ID không hợp lệ. Vui lòng thử lại.");
+        return;
+      }
+      
       console.log("🗑️ [TrainingPlansPage] Deleting training plan ID:", id);
-      await trainingPlanAPI.delete(id);
-      console.log("✅ Training plan deleted successfully");
+      console.log("🗑️ [TrainingPlansPage] Delete target:", deleteTarget);
+      
+      const response = await trainingPlanAPI.delete(id);
+      console.log("📥 Delete response:", response);
+      
+      // Check if response is successful
+      const isSuccess = isResponseSuccess(response);
+      console.log("🔍 Response success check:", isSuccess, "Response data:", response?.data);
+      
+      if (!isSuccess) {
+        const errorMsg = getErrorMessage(response, "Không thể xóa training plan. Vui lòng thử lại.");
+        console.error("❌ API returned unsuccessful response:", {
+          response,
+          responseData: response?.data,
+          success: response?.data?.success,
+          message: response?.data?.message
+        });
+        setError(errorMsg);
+        return; // Don't reload or close modal if delete failed
+      }
+
+      console.log("✅ Training plan deleted successfully, reloading data...");
+      // Only reload and close modal if delete was successful
       await fetchTrainingPlans();
       setDeleteTarget(null);
     } catch (error: any) {
@@ -172,7 +218,12 @@ export function TrainingPlansPage() {
         "❌ [TrainingPlansPage] Error deleting training plan:",
         error
       );
-      setError(error?.message || "Không thể xóa training plan");
+      const errorMsg = error?.response?.data?.message 
+        || error?.message 
+        || "Không thể xóa training plan. Vui lòng thử lại.";
+      setError(errorMsg);
+    } finally {
+      setSubmitLoading(false);
     }
   };
 
@@ -464,28 +515,17 @@ export function TrainingPlansPage() {
                 }
                 placeholder="ví dụ: 30 ngày"
               />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  label="Giá bán (USD)"
-                  type="number"
-                  value={String(form.price)}
-                  onChange={(value) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      price: Number(value) || 0,
-                    }))
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                  Mô tả <span className="text-red-500">*</span>
+                </label>
+                <Textarea
+                  value={form.description || ""}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, description: e.target.value }))
                   }
-                />
-                <FormField
-                  label="Subscribers"
-                  type="number"
-                  value={String(form.subscribers)}
-                  onChange={(value) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      subscribers: Number(value) || 0,
-                    }))
-                  }
+                  className="min-h-[100px] border-gray-300 focus:border-purple-500 focus:ring-purple-500"
+                  placeholder="Mô tả chi tiết về training plan..."
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -561,11 +601,15 @@ export function TrainingPlansPage() {
                   variant="danger"
                   onClick={() => {
                     if (deleteTarget) {
-                      handleDelete(deleteTarget.id);
+                      // Use tpId if available (backend format), otherwise use id
+                      const idToDelete = (deleteTarget as any).tpId || deleteTarget.id;
+                      console.log("🗑️ [TrainingPlansPage] Delete button clicked, ID to delete:", idToDelete, "Full deleteTarget:", deleteTarget);
+                      handleDelete(idToDelete);
                     }
                   }}
+                  disabled={submitLoading}
                 >
-                  Xóa
+                  {submitLoading ? "Đang xóa..." : "Xóa"}
                 </Button>
               </div>
             }

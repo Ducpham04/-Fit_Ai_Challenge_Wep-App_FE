@@ -47,40 +47,88 @@ export  function DashboardPage() {
         pRes,
         gRes,
       ] = await Promise.all([
-        userAPI.getAll(),
-        challengeAPI.getAll(),
-        rewardAPI.getAll(),
-        transactionAPI.getAll(),
-        trainingPlanAPI.getAll(),
-        goalAPI.getAll(),
+        userAPI.getAll().catch(err => {
+          console.error("❌ [Dashboard] Error loading users:", err);
+          return { data: [] };
+        }),
+        challengeAPI.getAll().catch(err => {
+          console.error("❌ [Dashboard] Error loading challenges:", err);
+          return { data: [] };
+        }),
+        rewardAPI.getAll().catch(err => {
+          console.error("❌ [Dashboard] Error loading rewards:", err);
+          return { data: [] };
+        }),
+        transactionAPI.getAll().catch(err => {
+          console.error("❌ [Dashboard] Error loading transactions:", err);
+          return { data: [] };
+        }),
+        trainingPlanAPI.getAll().catch(err => {
+          console.error("❌ [Dashboard] Error loading training plans:", err);
+          return { data: [] };
+        }),
+        goalAPI.getAll().catch(err => {
+          console.error("❌ [Dashboard] Error loading goals:", err);
+          return { data: [] };
+        }),
       ]);
 
       // Extract data with dual-format handling
       let userData = [];
-      if (Array.isArray(uRes.data)) userData = uRes.data;
-      else if (Array.isArray(uRes.data?.data)) userData = uRes.data.data;
+      if (uRes?.data) {
+        // Handle Spring Page format (has content array)
+        if (uRes.data.content && Array.isArray(uRes.data.content)) {
+          userData = uRes.data.content;
+        }
+        // Handle direct array
+        else if (Array.isArray(uRes.data)) {
+          userData = uRes.data;
+        }
+        // Handle NotificationResponse format
+        else if (Array.isArray(uRes.data?.data)) {
+          userData = uRes.data.data;
+        }
+      }
       
       let challengeData = [];
-      if (Array.isArray(cRes.data)) challengeData = cRes.data;
-      else if (Array.isArray(cRes.data?.data)) challengeData = cRes.data.data;
+      if (cRes?.data) {
+        if (Array.isArray(cRes.data)) challengeData = cRes.data;
+        else if (Array.isArray(cRes.data?.data)) challengeData = cRes.data.data;
+      }
 
       let rewardData = [];
-      if (Array.isArray(rRes.data)) rewardData = rRes.data;
-      else if (Array.isArray(rRes.data?.data)) rewardData = rRes.data.data;
+      if (rRes?.data) {
+        if (Array.isArray(rRes.data)) rewardData = rRes.data;
+        else if (Array.isArray(rRes.data?.data)) rewardData = rRes.data.data;
+      }
 
       let transactionData = [];
-      if (Array.isArray(tRes.data)) transactionData = tRes.data;
-      else if (Array.isArray(tRes.data?.data)) transactionData = tRes.data.data;
+      if (tRes?.data) {
+        if (Array.isArray(tRes.data)) transactionData = tRes.data;
+        else if (Array.isArray(tRes.data?.data)) transactionData = tRes.data.data;
+      }
 
       let planData = [];
-      if (Array.isArray(pRes.data)) planData = pRes.data;
-      else if (Array.isArray(pRes.data?.data)) planData = pRes.data.data;
+      if (pRes?.data) {
+        if (Array.isArray(pRes.data)) planData = pRes.data;
+        else if (Array.isArray(pRes.data?.data)) planData = pRes.data.data;
+      }
 
       let goalData = [];
-      if (Array.isArray(gRes.data)) goalData = gRes.data;
-      else if (Array.isArray(gRes.data?.data)) goalData = gRes.data.data;
+      if (gRes?.data) {
+        if (Array.isArray(gRes.data)) goalData = gRes.data;
+        else if (Array.isArray(gRes.data?.data)) goalData = gRes.data.data;
+      }
 
-      console.log("✅ [Dashboard] Data loaded successfully");
+      console.log("✅ [Dashboard] Data loaded successfully", {
+        users: userData.length,
+        challenges: challengeData.length,
+        rewards: rewardData.length,
+        transactions: transactionData.length,
+        plans: planData.length,
+        goals: goalData.length,
+      });
+      
       setUsers(userData);
       setChallenges(challengeData);
       setRewards(rewardData);
@@ -89,7 +137,12 @@ export  function DashboardPage() {
       setGoals(goalData);
     } catch (err: any) {
       console.error("❌ [Dashboard] Load error:", err);
-      setError(err?.message || "Failed to load dashboard data");
+      console.error("❌ [Dashboard] Error details:", {
+        message: err?.message,
+        response: err?.response?.data,
+        status: err?.response?.status,
+      });
+      setError(err?.response?.data?.message || err?.message || "Failed to load dashboard data");
     } finally {
       setLoading(false);
     }
@@ -133,9 +186,20 @@ export  function DashboardPage() {
       dailyTransactions.set(dateStr, 0);
     }
     transactions.forEach((t) => {
-      const dateStr = new Date(t.date).toISOString().split('T')[0];
-      if (dailyTransactions.has(dateStr)) {
-        dailyTransactions.set(dateStr, (dailyTransactions.get(dateStr) || 0) + 1);
+      // Validate date before parsing
+      if (!t.date) return;
+      
+      try {
+        const date = new Date(t.date);
+        // Check if date is valid
+        if (isNaN(date.getTime())) return;
+        
+        const dateStr = date.toISOString().split('T')[0];
+        if (dailyTransactions.has(dateStr)) {
+          dailyTransactions.set(dateStr, (dailyTransactions.get(dateStr) || 0) + 1);
+        }
+      } catch (err) {
+        console.warn("Invalid date in transaction:", t.date, err);
       }
     });
     const transactionTrends = Array.from(dailyTransactions.entries()).map(([date, count]) => ({
@@ -162,17 +226,30 @@ export  function DashboardPage() {
   }, [users, challenges, rewards, transactions, plans, goals]);
 
   const latestUsers = [...users]
+    .filter(u => u.createdAt) // Filter out users without createdAt
     .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() -
-        new Date(a.createdAt).getTime()
+      (a, b) => {
+        const dateA = new Date(a.createdAt);
+        const dateB = new Date(b.createdAt);
+        // Handle invalid dates
+        if (isNaN(dateA.getTime())) return 1;
+        if (isNaN(dateB.getTime())) return -1;
+        return dateB.getTime() - dateA.getTime();
+      }
     )
     .slice(0, 5);
 
   const latestTransactions = [...transactions]
+    .filter(t => t.date) // Filter out transactions without date
     .sort(
-      (a, b) =>
-        new Date(b.date).getTime() - new Date(a.date).getTime()
+      (a, b) => {
+        const dateA = new Date(a.date);
+        const dateB = new Date(b.date);
+        // Handle invalid dates
+        if (isNaN(dateA.getTime())) return 1;
+        if (isNaN(dateB.getTime())) return -1;
+        return dateB.getTime() - dateA.getTime();
+      }
     )
     .slice(0, 5);
 
@@ -320,7 +397,18 @@ export  function DashboardPage() {
               <li key={t.id} className="flex items-center justify-between border-b pb-2 hover:bg-gray-50 p-2 rounded">
                 <div>
                   <p className="font-medium">{t.userName}</p>
-                  <p className="text-sm text-gray-500">{t.type} • {new Date(t.date).toLocaleDateString()}</p>
+                  <p className="text-sm text-gray-500">
+                    {t.type} • {
+                      t.date ? (() => {
+                        try {
+                          const date = new Date(t.date);
+                          return isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleDateString();
+                        } catch {
+                          return 'Invalid date';
+                        }
+                      })() : 'No date'
+                    }
+                  </p>
                 </div>
                 <div className="text-right">
                   <p className={`font-semibold ${

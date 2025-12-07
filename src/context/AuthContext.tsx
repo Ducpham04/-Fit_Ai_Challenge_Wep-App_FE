@@ -83,6 +83,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
     
     setUser(me.data);
+    
+    // Store user ID for easy access
+    if (me.data?.id) {
+      localStorage.setItem('userId', me.data.id.toString());
+    }
+    
     return me.data;
   } catch (err) {
     console.error("❌ Login error:", err);

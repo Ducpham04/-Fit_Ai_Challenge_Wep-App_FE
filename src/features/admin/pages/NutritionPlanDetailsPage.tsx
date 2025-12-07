@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
 import { ArrowLeft, Plus, Edit2, Trash2, AlertCircle, Search, Apple, Utensils } from "lucide-react";
 import { AdminNutritionPlan } from "../types/admin-entities";
 

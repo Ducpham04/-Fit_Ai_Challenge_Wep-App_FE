@@ -39,6 +39,13 @@ export interface Challenge {
   description: string;
   difficulty: 'EASY' | 'MEDIUM' | 'HARD';
   videoUrl: string; // linkVideos from backend
+  // Personalized fields
+  defaultReps?: number; // Default reps from template
+  customReps?: number; // Personalized reps
+  defaultDuration?: number; // Default duration from template
+  customTime?: number; // Personalized time
+  exerciseVariant?: string; // Modified exercise for injuries
+  intensityLevel?: number; // 1-10
   aiAnalysis?: {
     correctReps: number;
     totalReps: number;
@@ -64,7 +71,7 @@ export interface TrainingPlanDetail {
 }
 
 export interface UserCurrentTrainingPlan {
-  id: number;
+  id: number; // utId (UserTraining ID)
   trainingPlanId: number;
   name?: string;
   planName: string;

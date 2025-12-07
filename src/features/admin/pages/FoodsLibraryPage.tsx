@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
+import { SimpleModal } from "@/components/ui/simple-modal";
 import { Plus, Search, AlertCircle, Edit2, Trash2, Apple, Filter, X } from "lucide-react";
-import { FormField } from "@/components_1/ui/form-field";
+import { FormField } from "@/components/ui/form-field";
 
 interface AdminFood {
   id: number;
@@ -281,20 +282,6 @@ const MOCK_FOODS: AdminFood[] = [
 
 type ModalMode = "create" | "edit";
 
-function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50" onClick={onClose}></div>
-      <div
-        className="bg-white p-8 rounded-xl w-[500px] max-w-[90%] shadow-2xl relative z-10 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
 export function FoodsLibraryPage() {
   const [foods, setFoods] = useState<AdminFood[]>(MOCK_FOODS);
   const [error, setError] = useState<string | null>(null);
@@ -438,7 +425,8 @@ export function FoodsLibraryPage() {
           </div>
           <Button
             onClick={openCreateModal}
-            className="flex items-center gap-2 bg-blue-600 px-4 py-2 hover:bg-blue-700"
+            variant="primary"
+            className="flex items-center gap-2"
           >
             <Plus size={18} /> Add Food
           </Button>
@@ -657,11 +645,22 @@ export function FoodsLibraryPage() {
 
       {/* Create/Edit Modal */}
       {!deleteTarget && modalState.open && (
-        <Modal onClose={closeModal}>
-          <h2 className="text-xl font-bold mb-6">
-            {modalState.mode === "create" ? "Add New Food" : "Edit Food"}
-          </h2>
-
+        <SimpleModal
+          isOpen={modalState.open}
+          onClose={closeModal}
+          title={modalState.mode === "create" ? "Add New Food" : "Edit Food"}
+          className="max-w-lg max-h-[90vh] overflow-y-auto"
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={closeModal} disabled={submitLoading}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={handleSubmit} disabled={submitLoading}>
+                {submitLoading ? "Saving..." : modalState.mode === "create" ? "Add Food" : "Update Food"}
+              </Button>
+            </div>
+          }
+        >
           <div className="space-y-4">
             <FormField
               label="Food Name"
@@ -726,36 +725,31 @@ export function FoodsLibraryPage() {
                 {error}
               </div>
             )}
-
-            <div className="mt-6 flex justify-end gap-3">
-              <Button variant="outline" onClick={closeModal} disabled={submitLoading}>
-                Cancel
-              </Button>
-              <Button onClick={handleSubmit} disabled={submitLoading}>
-                {submitLoading ? "Saving..." : modalState.mode === "create" ? "Add Food" : "Update Food"}
-              </Button>
-            </div>
           </div>
-        </Modal>
+        </SimpleModal>
       )}
 
       {/* Delete Modal */}
       {deleteTarget && (
-        <Modal onClose={closeModal}>
-          <h2 className="text-xl font-bold mb-4">Delete Food</h2>
-          <p className="text-gray-600 mb-6">
+        <SimpleModal
+          isOpen={Boolean(deleteTarget)}
+          onClose={closeModal}
+          title="Delete Food"
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={closeModal} disabled={submitLoading}>
+                Cancel
+              </Button>
+              <Button variant="danger" onClick={handleDelete} disabled={submitLoading}>
+                {submitLoading ? "Deleting..." : "Delete Food"}
+              </Button>
+            </div>
+          }
+        >
+          <p className="text-gray-600">
             Are you sure you want to delete <strong>{deleteTarget.name}</strong>? This action cannot be undone.
           </p>
-
-          <div className="mt-6 flex justify-end gap-3">
-            <Button variant="outline" onClick={closeModal} disabled={submitLoading}>
-              Cancel
-            </Button>
-            <Button onClick={handleDelete} disabled={submitLoading}>
-              {submitLoading ? "Deleting..." : "Delete Food"}
-            </Button>
-          </div>
-        </Modal>
+        </SimpleModal>
       )}
     </main>
   );
