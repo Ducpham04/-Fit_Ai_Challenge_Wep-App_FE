@@ -65,6 +65,8 @@ export function TrainingPlanDetailsPage({ plan, onBack }: TrainingPlanDetailsPag
   const [error, setError] = useState<string | null>(null);
   const [showAddDayModal, setShowAddDayModal] = useState(false);
   const [challenges, setChallenges] = useState<any[]>([]);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; name: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [newDayForm, setNewDayForm] = useState<{
     dayNumber: number;
     challengeId: number;
@@ -345,13 +347,13 @@ export function TrainingPlanDetailsPage({ plan, onBack }: TrainingPlanDetailsPag
                   <div>
                     <p className="text-sm text-gray-600 uppercase">Duration</p>
                     <p className="font-semibold text-gray-900 mt-1">
-                      {plan.duration ? `${plan.duration} weeks` : "N/A"}
+                      {plan.durationWeeks ? `${plan.durationWeeks} weeks` : "N/A"}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600 uppercase">Level</p>
                     <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded text-sm font-medium mt-1 capitalize">
-                      {plan.difficulty?.toLowerCase() || "N/A"}
+                      {plan.difficultyLevel?.toLowerCase() || "N/A"}
                     </span>
                   </div>
                 </div>
@@ -452,10 +454,26 @@ export function TrainingPlanDetailsPage({ plan, onBack }: TrainingPlanDetailsPag
                             )}
                           </div>
                           <div className="flex gap-2">
-                            <button className="p-1 hover:bg-blue-100 rounded text-blue-600">
+                            <button 
+                              onClick={() => {
+                                // TODO: Implement edit functionality
+                                alert("Edit functionality coming soon");
+                              }}
+                              className="p-1 hover:bg-blue-100 rounded text-blue-600 transition"
+                              title="Edit exercise"
+                            >
                               <Edit2 size={14} />
                             </button>
-                            <button className="p-1 hover:bg-red-100 rounded text-red-600">
+                            <button 
+                              onClick={() => {
+                                setDeleteConfirm({
+                                  id: exercise.id,
+                                  name: exercise.name
+                                });
+                              }}
+                              className="p-1 hover:bg-red-100 rounded text-red-600 transition"
+                              title="Delete exercise"
+                            >
                               <Trash2 size={14} />
                             </button>
                           </div>
@@ -495,6 +513,79 @@ export function TrainingPlanDetailsPage({ plan, onBack }: TrainingPlanDetailsPag
                 </div>
                 ))
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {deleteConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+              <div className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-red-100 rounded-full">
+                    <AlertCircle className="w-6 h-6 text-red-600" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">Delete Exercise</h3>
+                </div>
+                <p className="text-gray-700 mb-6">
+                  Are you sure you want to delete <span className="font-semibold">"{deleteConfirm.name}"</span>? 
+                  This action cannot be undone.
+                </p>
+                <div className="flex gap-3 justify-end">
+                  <Button
+                    variant="outline"
+                    onClick={() => setDeleteConfirm(null)}
+                    disabled={isDeleting}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={async () => {
+                      if (!deleteConfirm) return;
+                      
+                      try {
+                        setIsDeleting(true);
+                        const response = await client.delete(
+                          `/admin/training-plan-details/${deleteConfirm.id}`
+                        );
+
+                        if (response.data?.success) {
+                          // Reload plan details
+                          const detailsResponse = await client.get(
+                            `/admin/training-plan-details/${plan.id}`
+                          );
+                          const updatedDetails = detailsResponse.data?.data || [];
+                          setPlanDetails(updatedDetails);
+                          
+                          setDeleteConfirm(null);
+                          // Show success message
+                          alert("Exercise deleted successfully!");
+                        } else {
+                          alert(response.data?.message || "Error deleting exercise");
+                        }
+                      } catch (error: any) {
+                        console.error("Error deleting exercise:", error);
+                        alert(error?.response?.data?.message || "Error deleting exercise");
+                      } finally {
+                        setIsDeleting(false);
+                      }
+                    }}
+                    disabled={isDeleting}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    {isDeleting ? (
+                      <span className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Deleting...
+                      </span>
+                    ) : (
+                      "Delete"
+                    )}
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         )}

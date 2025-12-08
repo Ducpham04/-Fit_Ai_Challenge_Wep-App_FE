@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Challenge } from '../types/myChallenge.type';
-import { Play, RotateCcw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Video } from 'lucide-react';
-import { AIRepCounter, AIAnalysisResult } from './AIRepCounter';
+import { Play, RotateCcw, CheckCircle, AlertCircle, Upload, Loader } from 'lucide-react';
+import { AIAnalysisResult } from './AIRepCounter';
 
 interface ChallengeCardProps {
   challenge: Challenge;
@@ -9,6 +9,7 @@ interface ChallengeCardProps {
   onUploadClick: (challenge: Challenge) => void;
   trainingPlanId?: number | string;
   onAnalysisComplete?: (challenge: Challenge, analysis: AIAnalysisResult) => void;
+  onVideoUpload?: (challenge: Challenge, file: File) => Promise<void>; // ✅ Tự động analyze khi upload
 }
 const url = "localhost://8080/"
 export const ChallengeCard: React.FC<ChallengeCardProps> = ({
@@ -17,8 +18,10 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
   onUploadClick,
   trainingPlanId,
   onAnalysisComplete,
+  onVideoUpload,
 }) => {
-  const [showRepCounter, setShowRepCounter] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   console.log("In ra :", challenge.videoUrl)
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -86,6 +89,45 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
         return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    console.log('🔵 [ChallengeCard] File selected:', file.name);
+    
+    // Validate video file
+    if (!file.type.startsWith('video/')) {
+      alert('Please select a video file');
+      return;
+    }
+
+    if (file.size > 100 * 1024 * 1024) { // 100MB limit
+      alert('Video file too large (max 100MB)');
+      return;
+    }
+    
+    // ✅ Tự động analyze khi upload
+    if (onVideoUpload) {
+      setIsAnalyzing(true);
+      try {
+        await onVideoUpload(challenge, file);
+        console.log('✅ [ChallengeCard] Video analyzed successfully');
+      } catch (error) {
+        console.error('❌ [ChallengeCard] Error analyzing video:', error);
+        alert('Failed to analyze video. Please try again.');
+      } finally {
+        setIsAnalyzing(false);
+        // Reset file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    } else {
+      // Fallback: Mở modal upload
+      onUploadClick(challenge);
     }
   };
 
@@ -221,73 +263,36 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
             Start Challenge
           </button>
         )}
-        <button
-          onClick={() => onUploadClick(challenge)}
+        <label
           style={{
-            background: 'linear-gradient(to right, #4b5563, #374151)',
+            background: isAnalyzing 
+              ? 'linear-gradient(to right, #6b7280, #4b5563)'
+              : 'linear-gradient(to right, #4b5563, #374151)',
             color: '#ffffff'
           }}
-          className="flex-1 flex items-center justify-center gap-2 px-5 py-3 text-white rounded-lg hover:opacity-90 font-semibold text-sm transition-all shadow-md hover:shadow-lg"
+          className="flex-1 flex items-center justify-center gap-2 px-5 py-3 text-white rounded-lg hover:opacity-90 font-semibold text-sm transition-all shadow-md hover:shadow-lg cursor-pointer"
         >
-          <RotateCcw className="w-4 h-4" />
-          {challenge.videoUrl && challenge.videoUrl.trim() !== '' ? 'Re-upload Video' : 'Upload Video'}
-        </button>
-        <button
-          onClick={() => setShowRepCounter(!showRepCounter)}
-          style={{
-            background: showRepCounter 
-              ? 'linear-gradient(to right, #9333ea, #7e22ce)'
-              : 'linear-gradient(to right, #16a34a, #15803d)',
-            color: '#ffffff'
-          }}
-          className="flex items-center justify-center gap-2 px-5 py-3 rounded-lg font-semibold text-sm transition-all shadow-md hover:shadow-lg hover:opacity-90"
-        >
-          <Video className="w-4 h-4" />
-          {showRepCounter ? (
+          {isAnalyzing ? (
             <>
-              <ChevronUp className="w-4 h-4" />
-              Hide Counter
+              <Loader className="w-4 h-4 animate-spin" />
+              Analyzing...
             </>
           ) : (
             <>
-              <ChevronDown className="w-4 h-4" />
-              AI Counter
+              <Upload className="w-4 h-4" />
+              {challenge.videoUrl && challenge.videoUrl.trim() !== '' ? 'Re-upload Video' : 'Upload & Analyze'}
             </>
           )}
-        </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="video/*"
+            onChange={handleFileSelect}
+            className="hidden"
+            disabled={isAnalyzing}
+          />
+        </label>
       </div>
-
-      {/* AI Rep Counter Section - Expandable */}
-      {showRepCounter && (
-        <div className="mt-4 pt-4 border-t border-gray-300">
-          <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg p-4 border border-purple-200">
-            <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              <Video className="w-5 h-5 text-purple-600" />
-              AI Rep Counter - Upload & Analyze Video
-            </h4>
-            <AIRepCounter
-              targetReps={challenge.reps}
-              targetSets={challenge.sets}
-              challengeName={challenge.challengeName}
-              challengeId={challenge.challengeId}
-              trainingPlanId={trainingPlanId || 0}
-              onAnalysisComplete={(analysis) => {
-                console.log('✅ AI Analysis Complete in ChallengeCard:', analysis);
-                if (onAnalysisComplete) {
-                  onAnalysisComplete(challenge, analysis);
-                }
-                // Auto-hide counter after successful analysis
-                if (analysis.isPassed) {
-                  setTimeout(() => {
-                    setShowRepCounter(false);
-                  }, 2000);
-                }
-              }}
-              isLoading={false}
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 };

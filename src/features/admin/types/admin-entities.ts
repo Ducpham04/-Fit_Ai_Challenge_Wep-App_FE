@@ -9,6 +9,7 @@ export interface AdminChallenge {
   difficult: string;
   videoFile: File | null;
   goalId?: number;
+  exerciseType?: string; // AI model/exercise type: push-up, squat, pull-up, sit-up, plank
 }
 
 export type ChallengePayload = Omit<AdminChallenge, "id">;
@@ -116,10 +117,12 @@ export interface AdminTrainingPlan {
   durationWeeks: string;
   difficultyLevel: TrainingDifficulty;
   subscribers: number;
+  description: string;
   price: number;
   status: TrainingPlanStatus;
   goalId : number ;
   goalName : string ;
+  linkImage?: string; // Goal image from backend
   focusArea: string;
   createAt: string;
 }

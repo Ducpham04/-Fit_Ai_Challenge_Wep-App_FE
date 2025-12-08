@@ -16,6 +16,7 @@ import {
   Bot,
   Leaf,
   Bell,
+  Activity,
 } from "lucide-react";
 
 interface AdminLayoutProps {
@@ -47,6 +48,7 @@ export function AdminLayout({ children, currentPage, onPageChange }: AdminLayout
     { id: "nutrition-plans", label: "Nutrition", icon: <Leaf size={20} /> },
     { id: "ai-logs", label: "AI Logs", icon: <Bot size={20} /> },
     { id: "notifications", label: "Notifications", icon: <Bell size={20} /> },
+    { id: "fitness-ai-demo", label: "Fitness AI Demo", icon: <Activity size={20} /> },
   ];
 
   return (

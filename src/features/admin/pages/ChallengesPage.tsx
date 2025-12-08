@@ -19,6 +19,7 @@ const DEFAULT_FORM: ChallengePayload = {
   difficult: "EASY",
   videoFile: null,
   goalId: undefined,
+  exerciseType: undefined,
 };
 
 type ModalMode = "create" | "edit";
@@ -61,13 +62,30 @@ export function ChallengesPage() {
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [deleteModal, setDeleteModal] = useState<AdminChallenge | null>(null);
   const [detailChallenge, setDetailChallenge] = useState<AdminChallenge | null>(null);
+  const [availableExercises, setAvailableExercises] = useState<string[]>([]);
+  const [loadingExercises, setLoadingExercises] = useState(false);
 
   // Debounced search
   const debouncedSearch = useDebounce(searchTerm, 300);
 
   useEffect(() => {
     fetchChallenges();
+    fetchAvailableExercises();
   }, []);
+
+  const fetchAvailableExercises = async () => {
+    try {
+      setLoadingExercises(true);
+      const exercises = await challengeAPI.getAvailableExercises();
+      setAvailableExercises(exercises);
+    } catch (error) {
+      console.error("Error fetching exercises:", error);
+      // Set default exercises if API fails
+      setAvailableExercises(["push-up", "squat", "pull-up", "sit-up", "plank"]);
+    } finally {
+      setLoadingExercises(false);
+    }
+  };
 
   // Cleanup video preview URL
   useEffect(() => {
@@ -187,6 +205,7 @@ export function ChallengesPage() {
         difficult: form.difficult.toUpperCase(), // BE expects EASY, MEDIUM, HARD
         linkVideos: form.linkVideos || "", // Keep existing linkVideos if no new file
         status: form.status.toUpperCase(), // BE expects ACTIVE, INACTIVE, DRAFT, COMPLETED
+        exerciseType: form.exerciseType || null, // AI model/exercise type
       };
       
       // Add data as JSON string
@@ -671,6 +690,36 @@ export function ChallengesPage() {
                   ]}
                 />
               </div>
+            </div>
+
+            {/* AI Model Selection */}
+            <div className="grid gap-2">
+              <label className="text-sm font-medium text-gray-700">
+                AI Model / Loại bài tập
+              </label>
+              {loadingExercises ? (
+                <div className="text-sm text-gray-500">Đang tải danh sách...</div>
+              ) : (
+                <SimpleSelect
+                  value={form.exerciseType || ""}
+                  onChange={(value) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      exerciseType: value || undefined,
+                    }))
+                  }
+                  options={[
+                    { value: "", label: "Chọn AI Model (tùy chọn)" },
+                    ...availableExercises.map((exercise) => ({
+                      value: exercise,
+                      label: exercise.charAt(0).toUpperCase() + exercise.slice(1).replace("-", " "),
+                    })),
+                  ]}
+                />
+              )}
+              <p className="text-xs text-gray-500">
+                Chọn AI model để phân tích video submission của người dùng
+              </p>
             </div>
           </div>
         </SimpleModal>

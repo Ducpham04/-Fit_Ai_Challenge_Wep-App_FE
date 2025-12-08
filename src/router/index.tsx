@@ -10,6 +10,7 @@ import { Profile } from "../features/profile/pages/Profile";
 import { BodyRecordPage } from "../features/profile/pages/BodyRecordPage";
 import { BodyProgressPage } from "../features/profile/pages/BodyProgressPage";
 import { BodyProfilePage } from "../features/profile/pages/BodyProfilePage";
+import { HealthProfilePage } from "../features/profile/pages/HealthProfilePage";
 import { LoginEnhanced } from "../features/auth/pages/LoginEnhanced";
 import { Register } from "../features/auth/pages/Register";
 import { Settings } from "../features/settings/pages/Settings";
@@ -33,6 +34,7 @@ import { SystemSettingsPage } from "../features/admin/pages/SystemSettingsPage";
 import { HashRouter } from "react-router-dom";
 import { BodyInfoPage } from "../features/onboarding/pages/BodyInfoPage";
 import { RecommendedPlanPage } from "../features/onboarding/pages/RecommendedPlanPage";
+import { FitnessAIDemo } from "../components/fitnessAI/FitnessAIDemo";
 
 export const AppRouter = () => {
   return (
@@ -59,6 +61,7 @@ export const AppRouter = () => {
           <Route path="ai-logs" element={<AILogsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
           <Route path="settings" element={<SystemSettingsPage />} />
+          <Route path="fitness-ai-demo" element={<FitnessAIDemo />} />
         </Route>
 
         {/* Onboarding - No Layout */}
@@ -80,6 +83,7 @@ export const AppRouter = () => {
           <Route path="profile/body-record" element={<BodyRecordPage />} />
           <Route path="profile/body-progress" element={<BodyProgressPage />} />
           <Route path="profile/body-profile" element={<BodyProfilePage />} />
+          <Route path="profile/health-profile" element={<HealthProfilePage />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

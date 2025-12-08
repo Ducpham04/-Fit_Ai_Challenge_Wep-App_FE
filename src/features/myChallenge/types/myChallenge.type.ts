@@ -15,10 +15,44 @@ export interface TrainingPlanDetailDTO {
     difficult: 'EASY' | 'MEDIUM' | 'HARD';
     linkVideos: string;
     status: 'ACTIVE' | 'INACTIVE' | 'COMPLETED';
+    exerciseType?: string; // AI model/exercise type: push-up, squat, pull-up, sit-up, plank
   };
   challengeName: string;
   sets: number;
   reps: number;
+}
+
+// DailyTrainingLog Response from Backend
+export interface DailyTrainingLogDTO {
+  dtlId: number | null;
+  userId: number;
+  trainingPlanId: number;
+  trainingPlanTitle: string;
+  trainingDate: string;
+  dayNumber: number;
+  challengeId: number;
+  challengeName: string;
+  challengeTitle: string;
+  challengeDescription: string;
+  difficulty: 'EASY' | 'MEDIUM' | 'HARD' | string;
+  videoUrl: string;
+  exerciseType?: string;
+  status: 'not_started' | 'in_progress' | 'completed' | 'skipped';
+  actualDurationMinutes?: number;
+  caloriesBurned?: number;
+  setsCompleted?: number;
+  repsCompleted?: number;
+  targetSets: number;
+  targetReps: number;
+  score?: number;
+  confidence?: number;
+  notes?: string;
+  perceivedDifficulty?: number;
+  effortLevel?: number;
+  startedAt?: string;
+  completedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // Frontend Internal Types
@@ -29,16 +63,24 @@ export interface DayChallenges {
 }
 
 export interface Challenge {
-  id: number; // tpdId from backend
+  id: number; // dtlId from DailyTrainingLog or tpdId from template
   challengeId: number; // goalId from backend
   challengeName: string;
   title: string;
-  sets: number;
-  reps: number;
-  status: 'ACTIVE' | 'INACTIVE' | 'COMPLETED' | 'in_progress' | 'not_started';
+  sets: number; // targetSets from DailyTrainingLog
+  reps: number; // targetReps from DailyTrainingLog
+  status: 'ACTIVE' | 'INACTIVE' | 'COMPLETED' | 'in_progress' | 'not_started' | 'skipped';
   description: string;
   difficulty: 'EASY' | 'MEDIUM' | 'HARD';
   videoUrl: string; // linkVideos from backend
+  exerciseType?: string; // AI model/exercise type from backend
+  // Progress tracking from DailyTrainingLog
+  setsCompleted?: number;
+  repsCompleted?: number;
+  actualDurationMinutes?: number;
+  caloriesBurned?: number;
+  score?: number;
+  confidence?: number;
   // Personalized fields
   defaultReps?: number; // Default reps from template
   customReps?: number; // Personalized reps
@@ -56,7 +98,7 @@ export interface Challenge {
 }
 
 export interface TrainingPlanDetail {
-  id: string;
+  id: number;
   planName: string;
   description: string;
   duration: string;
@@ -66,7 +108,7 @@ export interface TrainingPlanDetail {
   totalDays: number;
   progressPercentage: number;
   dayChallenges: DayChallenges[];
-  userId: string;
+  userId: number;
   status: 'active' | 'completed' | 'paused';
 }
 

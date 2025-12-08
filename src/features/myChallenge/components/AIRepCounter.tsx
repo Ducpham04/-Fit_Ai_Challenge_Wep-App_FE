@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Activity, Upload, CheckCircle, AlertCircle, Loader, Download, RotateCcw, TrendingUp, Clock, Award } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { Activity, Upload, CheckCircle, AlertCircle, Loader, Download, RotateCcw, TrendingUp, Clock, Award, Wifi, WifiOff } from 'lucide-react';
 import apiClient from '@/api/client';
-import { usePushUpCounter, PushUpMetrics } from '@/hooks/usePushUpCounter';
-import { VideoPlayer } from '@/components/video/VideoPlayer';
+import { useFitnessAIWebSocket } from '@/hooks/useFitnessAIWebSocket';
+import { ExerciseType } from '@/api/fitnessAI.api';
 
 interface AIRepCounterProps {
   targetReps: number;
@@ -10,6 +10,8 @@ interface AIRepCounterProps {
   challengeName: string;
   challengeId: number;
   trainingPlanId: number | string;
+  exerciseType?: string; // AI model/exercise type from challenge
+  initialVideoUrl?: string; // ✅ ĐỒNG BỘ: Video URL từ challenge (nếu đã upload)
   onAnalysisComplete: (analysis: AIAnalysisResult) => void;
   isLoading?: boolean;
 }
@@ -34,37 +36,261 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
   challengeName,
   challengeId,
   trainingPlanId,
+  exerciseType,
+  initialVideoUrl,
   onAnalysisComplete,
   isLoading = false,
 }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string>('');
+  const [preview, setPreview] = useState<string>(initialVideoUrl || '');
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<AIAnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processingTime, setProcessingTime] = useState(0);
-  const [useAccurateModel, setUseAccurateModel] = useState(true); // Sử dụng mô hình chính xác hơn
+  
+  // ✅ ĐỒNG BỘ: Load video từ challenge nếu có
+  useEffect(() => {
+    if (initialVideoUrl && initialVideoUrl !== preview) {
+      console.log('🔵 [AIRepCounter] Loading initial video from challenge:', initialVideoUrl);
+      setPreview(initialVideoUrl);
+    }
+  }, [initialVideoUrl, preview]);
+  
+  // Map exerciseType from challenge to Python AI exercise type
+  const mapExerciseType = (exerciseType?: string): ExerciseType => {
+    if (!exerciseType) return 'push-up';
+    const type = exerciseType.toLowerCase();
+    if (type.includes('push') || type.includes('push-up')) return 'push-up';
+    if (type.includes('squat')) return 'squat';
+    if (type.includes('pull') || type.includes('pull-up')) return 'pull-up';
+    if (type.includes('sit') || type.includes('sit-up')) return 'sit-up';
+    if (type.includes('plank')) return 'plank';
+    return 'push-up'; // default
+  };
 
-  // MediaPipe pose detection hook (chính xác hơn)
+  const pythonExerciseType = mapExerciseType(exerciseType);
+
+  // Python AI Service WebSocket hook
   const {
-    metrics: pushUpMetrics,
-    isModelReady,
-    isProcessing: isProcessingVideo,
-    error: modelError,
-    startProcessing,
-    stopProcessing,
-    resetCounter,
-    processFrame,
-  } = usePushUpCounter();
+    metrics: pythonMetrics,
+    isConnected: isPythonConnected,
+    isProcessing: isPythonProcessing,
+    error: pythonError,
+    connect: connectPythonAI,
+    sendFrame: sendFrameToPython,
+    reset: resetPythonAI,
+  } = useFitnessAIWebSocket();
 
-  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
-  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
-  const processingRef = useRef<number | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Video ref - sử dụng trực tiếp như FitnessAIDemo
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const videoProcessedRef = useRef(false);
+  const startTimeRef = useRef<number>(0);
+  const analysisCompleteCalledRef = useRef(false);
+  const videoEndedRef = useRef(false); // Track video ended state
 
   const targetTotalReps = targetReps * targetSets;
 
+  // Connect WebSocket when exercise type is available - giống FitnessAIDemo
+  useEffect(() => {
+    if (pythonExerciseType) {
+      console.log('Connecting to Python AI for exercise:', pythonExerciseType);
+      connectPythonAI(pythonExerciseType);
+      return () => {
+        resetPythonAI();
+      };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pythonExerciseType]);
+
+  // Process video frames - WebSocket mode (continuous) - giống FitnessAIDemo
+  useEffect(() => {
+    if (!videoRef.current || !isPythonConnected) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      return;
+    }
+
+    // WebSocket: send frames continuously when video is playing
+    console.log('🎬 [AIRepCounter] Setting up frame sending interval...');
+    console.log('🎬 [AIRepCounter] Video state:', {
+      hasVideo: !!videoRef.current,
+      isConnected: isPythonConnected,
+      paused: videoRef.current?.paused,
+      readyState: videoRef.current?.readyState,
+    });
+    
+    intervalRef.current = setInterval(() => {
+      if (videoRef.current && isPythonConnected && !videoRef.current.paused && videoRef.current.readyState >= 2) {
+        sendFrameToPython(videoRef.current);
+      } else {
+        console.log('⏸️ [AIRepCounter] Skipping frame send:', {
+          hasVideo: !!videoRef.current,
+          isConnected: isPythonConnected,
+          paused: videoRef.current?.paused,
+          readyState: videoRef.current?.readyState,
+        });
+      }
+    }, 100); // 10 FPS - giống FitnessAIDemo
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPythonConnected]);
+
+  // Update error from Python AI
+  useEffect(() => {
+    if (pythonError) {
+      setError(pythonError);
+    }
+  }, [pythonError]);
+
+  // Function to process analysis - extracted để có thể gọi từ nhiều nơi
+  const processAnalysis = useCallback(() => {
+    const isVideoEnded = videoRef.current?.ended || videoEndedRef.current;
+    
+    if (
+      !videoRef.current ||
+      !isVideoEnded ||
+      videoProcessedRef.current ||
+      analysisCompleteCalledRef.current ||
+      !pythonMetrics ||
+      typeof pythonMetrics.reps !== 'number' ||
+      pythonMetrics.reps <= 0
+    ) {
+      console.log('⏸️ [AIRepCounter] processAnalysis: Conditions not met', {
+        hasVideo: !!videoRef.current,
+        videoEnded: videoRef.current?.ended,
+        videoEndedRef: videoEndedRef.current,
+        isVideoEnded,
+        videoProcessed: videoProcessedRef.current,
+        analysisCompleteCalled: analysisCompleteCalledRef.current,
+        hasMetrics: !!pythonMetrics,
+        reps: pythonMetrics?.reps,
+      });
+      return;
+    }
+
+    console.log('✅ [AIRepCounter] processAnalysis: Conditions met, processing analysis...');
+    videoProcessedRef.current = true;
+    analysisCompleteCalledRef.current = true;
+
+    const correctReps = pythonMetrics.reps;
+    const isPassed = correctReps >= targetTotalReps;
+    const qualityScore = typeof pythonMetrics.quality_score === 'number' ? pythonMetrics.quality_score : 0;
+    const processingTimeMs = startTimeRef.current ? Date.now() - startTimeRef.current : 0;
+    
+    // Build feedback from form errors (safely)
+    const formErrors = Array.isArray(pythonMetrics.form_errors) ? pythonMetrics.form_errors : [];
+    const formErrorsText = formErrors.length > 0
+      ? formErrors.map(e => e && e.message ? e.message : 'Form issue detected').join('. ')
+      : 'Good form maintained throughout.';
+    
+    const feedback = isPassed
+      ? `Excellent! You completed ${correctReps} reps with ${qualityScore}% quality score. ${formErrorsText}`
+      : `You completed ${correctReps} reps. Need ${targetTotalReps - correctReps} more to reach the target. ${formErrorsText}`;
+    
+    const is_valid_form = typeof pythonMetrics.is_valid_form === 'boolean' 
+      ? pythonMetrics.is_valid_form 
+      : qualityScore >= 60; // Default to valid if quality score is good
+    
+    const analysis: AIAnalysisResult = {
+      correctReps,
+      totalReps: correctReps,
+      accuracy: qualityScore / 100,
+      feedback,
+      posture: qualityScore >= 80 ? 'Excellent' : qualityScore >= 60 ? 'Good' : 'Fair',
+      formScore: qualityScore / 100,
+      isPassed,
+      videoUrl: preview,
+      confidence: is_valid_form ? 0.95 : 0.75,
+      processingTime: processingTimeMs,
+      userChallengeId: undefined,
+    };
+
+    console.log('✅ [AIRepCounter] Python AI Analysis Complete:', {
+      correctReps: analysis.correctReps,
+      targetTotalReps: targetTotalReps,
+      accuracy: (analysis.accuracy * 100).toFixed(1) + '%',
+      formScore: (analysis.formScore * 100).toFixed(1) + '%',
+      qualityScore: qualityScore,
+      formErrors: formErrors,
+      is_valid_form: is_valid_form,
+      isPassed: analysis.isPassed,
+      status: analysis.isPassed ? '✅ PASSED - Challenge will be marked as COMPLETED' : '❌ FAILED - Need more reps',
+    });
+
+    console.log('💾 [AIRepCounter] ========== SETTING RESULT STATE ==========');
+    console.log('💾 [AIRepCounter] Setting result state with:', JSON.stringify(analysis, null, 2));
+    setResult(analysis);
+    setProcessingTime(processingTimeMs);
+    console.log('✅ [AIRepCounter] Result state set successfully');
+    
+    // Call onAnalysisComplete only once
+    try {
+      console.log('📞 [AIRepCounter] ========== CALLING onAnalysisComplete ==========');
+      console.log('📞 [AIRepCounter] Calling onAnalysisComplete with analysis:', JSON.stringify(analysis, null, 2));
+      console.log('📞 [AIRepCounter] onAnalysisComplete function type:', typeof onAnalysisComplete);
+      console.log('📞 [AIRepCounter] onAnalysisComplete function:', onAnalysisComplete);
+      onAnalysisComplete(analysis);
+      console.log('✅ [AIRepCounter] onAnalysisComplete called successfully');
+    } catch (error) {
+      console.error('❌ [AIRepCounter] ========== ERROR CALLING onAnalysisComplete ==========');
+      console.error('❌ [AIRepCounter] Error calling onAnalysisComplete:', error);
+      console.error('❌ [AIRepCounter] Error details:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+    }
+  }, [pythonMetrics, targetTotalReps, preview, onAnalysisComplete]);
+
+  // Auto-complete analysis when video ends and we have Python AI metrics
+  useEffect(() => {
+    console.log('🔍 [AIRepCounter] useEffect triggered:', {
+      hasVideo: !!videoRef.current,
+      videoEnded: videoRef.current?.ended,
+      videoEndedRef: videoEndedRef.current,
+      videoProcessed: videoProcessedRef.current,
+      analysisCompleteCalled: analysisCompleteCalledRef.current,
+      hasMetrics: !!pythonMetrics,
+      reps: pythonMetrics?.reps,
+      targetTotalReps,
+    });
+
+    // Check if video ended and we have metrics
+    // Check both videoRef.current.ended and videoEndedRef.current
+    const isVideoEnded = videoRef.current?.ended || videoEndedRef.current;
+    
+    if (
+      videoRef.current &&
+      isVideoEnded &&
+      !videoProcessedRef.current &&
+      !analysisCompleteCalledRef.current &&
+      pythonMetrics &&
+      typeof pythonMetrics.reps === 'number' &&
+      pythonMetrics.reps > 0
+    ) {
+      console.log('✅ [AIRepCounter] useEffect: Conditions met, calling processAnalysis...');
+      processAnalysis();
+    } else {
+      console.log('⏸️ [AIRepCounter] useEffect: Conditions not met, skipping analysis', {
+        hasVideo: !!videoRef.current,
+        isVideoEnded,
+        videoProcessed: videoProcessedRef.current,
+        analysisCompleteCalled: analysisCompleteCalledRef.current,
+        hasMetrics: !!pythonMetrics,
+        reps: pythonMetrics?.reps,
+      });
+    }
+  }, [pythonMetrics, targetTotalReps, preview, processAnalysis]);
+
+  // Handle file select - giống FitnessAIDemo
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -84,195 +310,59 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
     setError(null);
     setResult(null);
     videoProcessedRef.current = false;
+    analysisCompleteCalledRef.current = false;
+    videoEndedRef.current = false;
 
-    // Create preview URL
+    // Create preview URL - giống FitnessAIDemo
     const url = URL.createObjectURL(file);
     setPreview(url);
-  };
-
-  // Handle video load from VideoPlayer
-  const handleVideoLoad = useCallback((video: HTMLVideoElement) => {
-    setVideoElement(video);
-    setError(null);
-  }, []);
-
-  // Handle video error
-  const handleVideoError = useCallback((errorMsg: string) => {
-    setError(errorMsg);
-  }, []);
-
-  // Handle play state change
-  const handlePlayStateChange = useCallback((isPlaying: boolean) => {
-    setIsVideoPlaying(isPlaying);
-    if (isPlaying && isModelReady) {
-      startProcessing();
-    } else {
-      stopProcessing();
-    }
-  }, [isModelReady, startProcessing, stopProcessing]);
-
-  // Processing loop for accurate video analysis
-  useEffect(() => {
-    if (!isProcessingVideo || !videoElement || !isVideoPlaying || !canvasRef.current || !useAccurateModel) {
-      if (processingRef.current) {
-        cancelAnimationFrame(processingRef.current);
-        processingRef.current = null;
+    
+    // Set video source - giống FitnessAIDemo
+    // Use setTimeout to ensure video element is rendered
+    setTimeout(() => {
+      if (videoRef.current) {
+        videoRef.current.src = url;
+        
+        // Reset metrics when new video is loaded
+        resetPythonAI();
+        
+        // Ensure WebSocket is connected
+        if (!isPythonConnected && pythonExerciseType) {
+          console.log('Connecting WebSocket after video upload');
+          connectPythonAI(pythonExerciseType);
+        }
+        
+        // Wait for video to load metadata
+        videoRef.current.onloadedmetadata = () => {
+          console.log('📥 [AIRepCounter] Video metadata loaded, ready to analyze');
+          console.log('📥 [AIRepCounter] Video info:', {
+            duration: videoRef.current?.duration,
+            readyState: videoRef.current?.readyState,
+            paused: videoRef.current?.paused,
+          });
+        };
+        
+        videoRef.current.oncanplay = () => {
+          console.log('▶️ [AIRepCounter] Video can play now');
+          console.log('▶️ [AIRepCounter] Video state:', {
+            readyState: videoRef.current?.readyState,
+            paused: videoRef.current?.paused,
+            currentTime: videoRef.current?.currentTime,
+            duration: videoRef.current?.duration,
+          });
+          // Auto-play video if possible (may be blocked by browser)
+          if (videoRef.current && videoRef.current.paused) {
+            console.log('▶️ [AIRepCounter] Attempting to auto-play video...');
+            videoRef.current.play().then(() => {
+              console.log('✅ [AIRepCounter] Video auto-played successfully');
+            }).catch((err) => {
+              console.warn('⚠️ [AIRepCounter] Auto-play blocked by browser, user needs to click play:', err);
+              console.warn('⚠️ [AIRepCounter] Please click the play button to start analysis');
+            });
+          }
+        };
       }
-      return;
-    }
-
-    const processLoop = async () => {
-      if (videoElement && !videoElement.paused && !videoElement.ended && canvasRef.current) {
-        await processFrame(videoElement, canvasRef.current);
-      }
-      processingRef.current = requestAnimationFrame(processLoop);
-    };
-
-    processingRef.current = requestAnimationFrame(processLoop);
-
-    return () => {
-      if (processingRef.current) {
-        cancelAnimationFrame(processingRef.current);
-        processingRef.current = null;
-      }
-    };
-  }, [isProcessingVideo, videoElement, isVideoPlaying, processFrame, useAccurateModel]);
-
-  // Auto-complete analysis when video ends and we have accurate metrics
-  useEffect(() => {
-    if (
-      useAccurateModel &&
-      videoElement &&
-      videoElement.ended &&
-      !videoProcessedRef.current &&
-      pushUpMetrics.reps > 0 &&
-      isModelReady
-    ) {
-      videoProcessedRef.current = true;
-      stopProcessing();
-      
-      // Use accurate metrics from MediaPipe
-      const correctReps = pushUpMetrics.reps;
-      const isPassed = correctReps >= targetTotalReps;
-      
-      const analysis: AIAnalysisResult = {
-        correctReps,
-        totalReps: correctReps,
-        accuracy: pushUpMetrics.qualityScore / 100,
-        feedback: isPassed
-          ? `Excellent! You completed ${correctReps} reps with good form.`
-          : `You completed ${correctReps} reps. Need ${targetTotalReps - correctReps} more to reach the target.`,
-        posture: pushUpMetrics.qualityScore >= 80 ? 'Excellent' : pushUpMetrics.qualityScore >= 60 ? 'Good' : 'Fair',
-        formScore: pushUpMetrics.qualityScore / 100,
-        isPassed,
-        videoUrl: preview,
-        confidence: 0.95, // High confidence from MediaPipe
-        processingTime: pushUpMetrics.elapsed * 1000,
-        userChallengeId: undefined,
-      };
-
-      console.log('✅ Accurate AI Analysis Complete (MediaPipe):', {
-        correctReps: analysis.correctReps,
-        targetTotalReps: targetTotalReps,
-        accuracy: (analysis.accuracy * 100).toFixed(1) + '%',
-        formScore: (analysis.formScore * 100).toFixed(1) + '%',
-        isPassed: analysis.isPassed,
-        status: analysis.isPassed ? '✅ PASSED - Challenge will be marked as COMPLETED' : '❌ FAILED - Need more reps',
-      });
-
-      setResult(analysis);
-      setProcessingTime(pushUpMetrics.elapsed * 1000);
-      onAnalysisComplete(analysis);
-    }
-  }, [videoElement, pushUpMetrics, targetTotalReps, preview, isModelReady, useAccurateModel, stopProcessing, onAnalysisComplete]);
-
-  const handleAnalyze = async () => {
-    if (!selectedFile) {
-      setError('Please select a video file');
-      return;
-    }
-
-    setAnalyzing(true);
-    setError(null);
-    const startTime = Date.now();
-
-    try {
-      console.log('🎬 [MOCK] Analyzing video (no backend API call):');
-      console.log('  Training Plan ID:', trainingPlanId);
-      console.log('  Challenge ID:', challengeId);
-      console.log('  File:', selectedFile.name);
-      console.log('  File Size:', (selectedFile.size / 1024 / 1024).toFixed(2), 'MB');
-      console.log('  Target Reps:', targetReps, 'x', targetSets, '=', targetTotalReps);
-
-      // ⚠️ MOCK MODE: Không gọi API, chỉ simulate phân tích
-      // Simulate processing time (2-4 seconds)
-      await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 2000));
-
-      const processingTimeMs = Date.now() - startTime;
-
-      // Generate mock analysis results
-      // Đảm bảo có khả năng đạt yêu cầu (70% chance để test)
-      const randomFactor = Math.random();
-      const correctReps = randomFactor > 0.3 
-        ? Math.floor(targetTotalReps + Math.random() * 3) // Đạt yêu cầu (70% chance)
-        : Math.floor(targetTotalReps * 0.7 + Math.random() * (targetTotalReps * 0.3)); // Chưa đạt (30% chance)
-      
-      // Kiểm tra: đạt yêu cầu nếu correctReps >= targetTotalReps
-      const isPassed = correctReps >= targetTotalReps;
-      
-      console.log('📊 AI Analysis Check:', {
-        targetReps: targetReps,
-        targetSets: targetSets,
-        targetTotalReps: targetTotalReps,
-        correctReps: correctReps,
-        isPassed: isPassed,
-        requirement: `correctReps (${correctReps}) >= targetTotalReps (${targetTotalReps})`,
-      });
-      
-      // Mock userChallengeId (sẽ được backend tạo khi có API thật)
-      const mockUserChallengeId = Math.floor(Math.random() * 1000) + 1;
-      
-      const analysis: AIAnalysisResult = {
-        correctReps,
-        totalReps: targetTotalReps + Math.floor(Math.random() * 5),
-        accuracy: Math.random() * 0.3 + (isPassed ? 0.8 : 0.5),
-        feedback: [
-          'Excellent form! Keep your back straight and maintain consistent pace.',
-          'Good range of motion. Try to engage your core more.',
-          'Maintain consistent speed throughout the set.',
-          'Your posture is excellent! Great job.',
-          'Try to go deeper for maximum muscle engagement.',
-          'Nice control! Avoid rushing through the movements.',
-        ][Math.floor(Math.random() * 6)],
-        posture: ['Excellent', 'Good', 'Fair', 'Good'][Math.floor(Math.random() * 4)],
-        formScore: Math.random() * 0.2 + (isPassed ? 0.75 : 0.55),
-        isPassed,
-        videoUrl: preview,
-        confidence: Math.random() * 0.2 + 0.8,
-        processingTime: processingTimeMs,
-        userChallengeId: mockUserChallengeId, // Mock ID, sẽ được thay bằng real ID khi có API
-      };
-
-      console.log('✅ AI Analysis Complete:', {
-        correctReps: analysis.correctReps,
-        targetTotalReps: targetTotalReps,
-        accuracy: (analysis.accuracy * 100).toFixed(1) + '%',
-        formScore: (analysis.formScore * 100).toFixed(1) + '%',
-        isPassed: analysis.isPassed,
-        status: analysis.isPassed ? '✅ PASSED - Challenge will be marked as COMPLETED' : '❌ FAILED - Need more reps',
-        processingTime: processingTimeMs + 'ms',
-      });
-
-      setResult(analysis);
-      setProcessingTime(processingTimeMs);
-      onAnalysisComplete(analysis);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to analyze video';
-      setError(errorMsg);
-      console.error('❌ Analysis Error:', err);
-    } finally {
-      setAnalyzing(false);
-    }
+    }, 100);
   };
 
   const handleReset = () => {
@@ -281,6 +371,15 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
     setResult(null);
     setError(null);
     setProcessingTime(0);
+    videoProcessedRef.current = false;
+    analysisCompleteCalledRef.current = false;
+    videoEndedRef.current = false;
+    
+    if (videoRef.current) {
+      videoRef.current.src = '';
+    }
+    
+    resetPythonAI();
   };
 
   const downloadResultsCSV = () => {
@@ -312,8 +411,17 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
     a.click();
   };
 
+  // Log result state for debugging
+  console.log('🎨 [AIRepCounter] ========== RENDERING COMPONENT ==========');
+  console.log('🎨 [AIRepCounter] result state:', result);
+  console.log('🎨 [AIRepCounter] Will render results section:', !!result);
+  if (result) {
+    console.log('🎨 [AIRepCounter] Rendering results with:', JSON.stringify(result, null, 2));
+  }
+  
   if (result) {
     const isPassed = result.correctReps >= targetTotalReps;
+    console.log('🎨 [AIRepCounter] isPassed:', isPassed, `(${result.correctReps} >= ${targetTotalReps})`);
     
     return (
       <div className="w-full">
@@ -338,7 +446,7 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
             </div>
           </div>
 
-          {/* Results Grid - Similar to AILogsPage */}
+          {/* Results Grid */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
             {/* Correct Reps */}
             <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
@@ -435,7 +543,7 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
             </button>
             <button
               onClick={downloadResultsCSV}
-              className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700  rounded-lg font-medium transition flex items-center justify-center gap-2"
+              className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition flex items-center justify-center gap-2"
             >
               <Download className="w-4 h-4" />
               Export Results
@@ -452,7 +560,7 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
                   console.error('❌ Failed to update status:', err);
                 }
               }}
-              className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700  rounded-lg font-medium transition"
+              className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition"
             >
               Mark as Complete
             </button>
@@ -478,238 +586,374 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
           </div>
         </div>
 
-        {/* Mode Toggle */}
+        {/* Python AI Connection Status */}
         <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-gray-900">Analysis Mode</p>
-              <p className="text-xs text-gray-600">
-                {useAccurateModel ? '🎯 Accurate (MediaPipe)' : '⚡ Quick (Mock)'}
-              </p>
+            <div className="flex items-center gap-3">
+              {isPythonConnected ? (
+                <>
+                  <Wifi className="w-5 h-5 text-green-600" />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Python AI Connected</p>
+                    <p className="text-xs text-gray-600">Exercise: {pythonExerciseType}</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-5 h-5 text-red-600" />
+                  <div>
+                    <p className="text-sm font-semibold text-red-600">Python AI Disconnected</p>
+                    <p className="text-xs text-gray-600">Connecting to AI service...</p>
+                  </div>
+                </>
+              )}
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={useAccurateModel}
-                onChange={(e) => {
-                  setUseAccurateModel(e.target.checked);
-                  if (e.target.checked) {
-                    resetCounter();
-                    setResult(null);
-                  }
-                }}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-            </label>
+            {pythonError && (
+              <div className="flex items-center gap-2 text-red-600">
+                <AlertCircle className="w-4 h-4" />
+                <span className="text-xs">{pythonError}</span>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Upload Area */}
-        {useAccurateModel && selectedFile ? (
-          <div className="border-2 border-blue-400 bg-blue-50 rounded-lg p-4">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {/* Video Section */}
-              <div className="lg:col-span-2">
-                <div className="relative mb-4 bg-black rounded-lg overflow-hidden">
-                  <VideoPlayer
-                    onVideoLoad={handleVideoLoad}
-                    onVideoError={handleVideoError}
-                    onPlayStateChange={handlePlayStateChange}
-                    className="mb-0"
-                    externalFile={selectedFile}
-                    externalVideoSrc={preview}
-                  />
-                  
-                  {/* Canvas overlay for pose visualization */}
-                  <canvas
-                    ref={canvasRef}
-                    className="absolute top-0 left-0 w-full h-full pointer-events-none"
-                    style={{ display: isProcessingVideo && videoElement ? 'block' : 'none' }}
-                  />
-                  
-                  {/* Real-time Rep Counter Overlay */}
-                  {isProcessingVideo && videoElement && (
-                    <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-sm rounded-lg p-4 border-2 border-blue-500">
-                      <div className="text-center">
-                        <p className="text-xs text-gray-300 uppercase mb-1">Reps</p>
-                        <p className="text-5xl font-bold text-white mb-1">
-                          {pushUpMetrics.reps}
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          Target: {targetTotalReps}
-                        </p>
-                        <div className="mt-2 w-full bg-gray-700 rounded-full h-2">
-                          <div
-                            className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                            style={{
-                              width: `${Math.min((pushUpMetrics.reps / targetTotalReps) * 100, 100)}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* State Indicator Overlay */}
-                  {isProcessingVideo && videoElement && (
-                    <div className="absolute top-4 right-4">
-                      <div
-                        className={`px-3 py-2 rounded-lg backdrop-blur-sm font-medium ${
-                          pushUpMetrics.state === 'up'
-                            ? 'bg-green-500/80 text-white'
-                            : pushUpMetrics.state === 'down'
-                            ? 'bg-orange-500/80 text-white'
-                            : 'bg-gray-500/80 text-white'
-                        }`}
-                      >
-                        {pushUpMetrics.state === 'up' ? '↑ Up' : pushUpMetrics.state === 'down' ? '↓ Down' : 'Waiting...'}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Status Bar */}
-                <div className="flex items-center justify-between p-3 bg-white rounded-lg mb-2">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    {isModelReady ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                        <span className="text-sm text-gray-600">Model Ready</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <Loader className="w-4 h-4 text-blue-500 animate-spin" />
-                        <span className="text-sm text-gray-600">Loading Model...</span>
-                      </div>
-                    )}
-                    {isProcessingVideo && (
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-                        <span className="text-sm text-gray-600">Processing...</span>
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    onClick={resetCounter}
-                    disabled={pushUpMetrics.reps === 0}
-                    className="px-4 py-2 text-sm font-medium text-white bg-orange-500 rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Reset
-                  </button>
-                </div>
+        {/* Video Upload Area */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-2">Video File</label>
+          <input
+            type="file"
+            accept="video/*"
+            onChange={handleFileSelect}
+            disabled={analyzing || isLoading}
+            className="w-full p-2 border rounded-lg"
+          />
+        </div>
+
+        {/* Video Player - giống FitnessAIDemo - luôn render */}
+        <div className="mb-4">
+          {/* Status Message */}
+          {preview && (
+            <div className={`mb-3 p-3 rounded-lg border ${
+              videoRef.current && !videoRef.current.paused && videoRef.current.readyState >= 2
+                ? 'bg-green-50 border-green-200'
+                : 'bg-yellow-50 border-yellow-200'
+            }`}>
+              <div className="flex items-center gap-2">
+                {videoRef.current && !videoRef.current.paused && videoRef.current.readyState >= 2 ? (
+                  <>
+                    <Activity className="w-4 h-4 text-green-600" />
+                    <p className="text-sm font-semibold text-green-800">✅ Video is playing - Analysis in progress</p>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="w-4 h-4 text-yellow-600" />
+                    <p className="text-sm font-semibold text-yellow-800">
+                      ⚠️ Please click the <strong>PLAY</strong> button below to start analysis
+                    </p>
+                  </>
+                )}
               </div>
+              {videoRef.current && (
+                <p className="text-xs text-gray-600 mt-1">
+                  Video state: {videoRef.current.paused ? 'Paused' : 'Playing'} | 
+                  Ready: {videoRef.current.readyState >= 2 ? 'Yes' : 'No'} | 
+                  WebSocket: {isPythonConnected ? 'Connected' : 'Disconnected'}
+                </p>
+              )}
+            </div>
+          )}
+          <div className="relative">
+            <video
+              ref={videoRef}
+              className="w-full rounded-lg bg-black"
+              controls
+              muted
+              playsInline
+              autoPlay={false}
+              onPlay={() => {
+                console.log('▶️ [AIRepCounter] ========== VIDEO STARTED PLAYING ==========');
+                console.log('▶️ [AIRepCounter] Video play event:', {
+                  currentTime: videoRef.current?.currentTime,
+                  duration: videoRef.current?.duration,
+                  readyState: videoRef.current?.readyState,
+                });
+                startTimeRef.current = Date.now();
+                console.log('▶️ [AIRepCounter] Start time set:', startTimeRef.current);
+                resetPythonAI();
+                console.log('▶️ [AIRepCounter] WebSocket state:', {
+                  isConnected: isPythonConnected,
+                  hasMetrics: !!pythonMetrics,
+                  exerciseType: pythonExerciseType,
+                });
+              }}
+              onPause={() => {
+                console.log('⏸️ [AIRepCounter] Video paused at:', videoRef.current?.currentTime);
+              }}
+              onLoadedData={() => {
+                console.log('📥 [AIRepCounter] Video data loaded, ready to analyze');
+                console.log('📥 [AIRepCounter] Video state after load:', {
+                  readyState: videoRef.current?.readyState,
+                  paused: videoRef.current?.paused,
+                  duration: videoRef.current?.duration,
+                });
+              }}
+              onCanPlay={() => {
+                console.log('▶️ [AIRepCounter] Video can play event fired');
+                console.log('▶️ [AIRepCounter] Video state:', {
+                  readyState: videoRef.current?.readyState,
+                  paused: videoRef.current?.paused,
+                  currentTime: videoRef.current?.currentTime,
+                  duration: videoRef.current?.duration,
+                });
+                // Try to auto-play if video is paused
+                if (videoRef.current && videoRef.current.paused) {
+                  console.log('▶️ [AIRepCounter] Attempting to auto-play video...');
+                  videoRef.current.play().then(() => {
+                    console.log('✅ [AIRepCounter] Video auto-played successfully');
+                  }).catch((err) => {
+                    console.warn('⚠️ [AIRepCounter] Auto-play blocked, user needs to click play:', err);
+                  });
+                }
+              }}
+              onEnded={() => {
+                console.log('🏁 [AIRepCounter] ========== VIDEO ENDED ==========');
+                console.log('🏁 [AIRepCounter] Video ended event:', {
+                  duration: videoRef.current?.duration,
+                  currentTime: videoRef.current?.currentTime,
+                  hasMetrics: !!pythonMetrics,
+                  reps: pythonMetrics?.reps,
+                  metricsFull: JSON.stringify(pythonMetrics, null, 2),
+                });
+                videoEndedRef.current = true;
+                // Trigger analysis check immediately when video ends
+                // Use setTimeout to ensure metrics are ready
+                setTimeout(() => {
+                  if (videoRef.current && videoRef.current.ended && !analysisCompleteCalledRef.current) {
+                    console.log('🏁 [AIRepCounter] After delay, checking metrics:', {
+                      hasMetrics: !!pythonMetrics,
+                      reps: pythonMetrics?.reps,
+                      metricsType: typeof pythonMetrics?.reps,
+                      metricsFull: JSON.stringify(pythonMetrics, null, 2),
+                    });
+                    // processAnalysis will be called by useEffect when pythonMetrics updates
+                    // But we can also try to call it directly here
+                    if (pythonMetrics && typeof pythonMetrics.reps === 'number' && pythonMetrics.reps > 0) {
+                      console.log('✅ [AIRepCounter] Video ended with metrics, calling processAnalysis...');
+                      processAnalysis();
+                    } else {
+                      console.warn('⚠️ [AIRepCounter] Video ended but no valid metrics yet, waiting for useEffect...');
+                    }
+                  }
+                }, 1000); // Delay to ensure metrics are ready
+              }}
+            />
               
-              {/* Real-time Metrics Cards */}
-              <div className="lg:col-span-1 space-y-3">
-                <h4 className="text-sm font-semibold text-gray-900 mb-2">Live Metrics</h4>
-                
-                {/* Reps Card */}
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-gray-600 uppercase">Reps</p>
-                    <Activity className="w-4 h-4 text-blue-600" />
+              {/* Real-time Rep Counter Overlay */}
+              {videoRef.current && !videoRef.current.paused && isPythonConnected && pythonMetrics && typeof pythonMetrics.reps === 'number' && (
+                <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-sm rounded-lg p-4 border-2 border-blue-500">
+                  <div className="text-center">
+                    <p className="text-xs text-gray-300 uppercase mb-1">Reps</p>
+                    <p className="text-5xl font-bold text-white mb-1">
+                      {pythonMetrics.reps}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      Target: {targetTotalReps}
+                    </p>
+                    <div className="mt-2 w-full bg-gray-700 rounded-full h-2">
+                      <div
+                        className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                        style={{
+                          width: `${Math.min((pythonMetrics.reps / targetTotalReps) * 100, 100)}%`,
+                        }}
+                      />
+                    </div>
                   </div>
-                  <p className="text-3xl font-bold text-blue-600">{pushUpMetrics.reps}</p>
-                  <p className="text-xs text-gray-600 mt-1">
-                    Target: {targetTotalReps} | Progress: {Math.round((pushUpMetrics.reps / targetTotalReps) * 100)}%
-                  </p>
                 </div>
-                
-                {/* Pace Card */}
-                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-gray-600 uppercase">Pace</p>
-                    <TrendingUp className="w-4 h-4 text-green-600" />
+              )}
+              
+              {/* State Indicator Overlay */}
+              {videoRef.current && !videoRef.current.paused && isPythonConnected && pythonMetrics && pythonMetrics.state && (
+                <div className="absolute top-4 right-4">
+                  <div
+                    className={`px-3 py-2 rounded-lg backdrop-blur-sm font-medium ${
+                      pythonMetrics.state === 'up'
+                        ? 'bg-green-500/80 text-white'
+                        : pythonMetrics.state === 'down'
+                        ? 'bg-orange-500/80 text-white'
+                        : pythonMetrics.state === 'holding'
+                        ? 'bg-blue-500/80 text-white'
+                        : 'bg-gray-500/80 text-white'
+                    }`}
+                  >
+                    {pythonMetrics.state === 'up' ? '↑ Up' : 
+                     pythonMetrics.state === 'down' ? '↓ Down' : 
+                     pythonMetrics.state === 'holding' ? '⏸ Holding' : 
+                     pythonMetrics.state === 'rest' ? '⏸ Rest' :
+                     'Waiting...'}
                   </div>
-                  <p className="text-2xl font-bold text-green-600">{pushUpMetrics.pace}</p>
-                  <p className="text-xs text-gray-600 mt-1">reps/min</p>
                 </div>
-                
-                {/* Time Card */}
-                <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border border-orange-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-gray-600 uppercase">Time</p>
-                    <Clock className="w-4 h-4 text-orange-600" />
+              )}
+
+              {/* Form Errors Overlay */}
+              {videoRef.current && !videoRef.current.paused && isPythonConnected && pythonMetrics && Array.isArray(pythonMetrics.form_errors) && pythonMetrics.form_errors.length > 0 && (
+                <div className="absolute bottom-4 left-4 right-4 bg-red-500/90 backdrop-blur-sm rounded-lg p-3 border-2 border-red-400">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-white mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-xs font-semibold text-white mb-1">Form Issues:</p>
+                      {pythonMetrics.form_errors.slice(0, 2).map((error, idx) => (
+                        <p key={idx} className="text-xs text-white/90">
+                          • {error.message}
+                        </p>
+                      ))}
+                    </div>
                   </div>
-                  <p className="text-2xl font-bold text-orange-600">{pushUpMetrics.elapsed}s</p>
-                  <p className="text-xs text-gray-600 mt-1">elapsed</p>
                 </div>
-                
-                {/* Quality Score Card */}
-                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-gray-600 uppercase">Quality</p>
-                    <Award className="w-4 h-4 text-purple-600" />
-                  </div>
-                  <p className="text-2xl font-bold text-purple-600">{pushUpMetrics.qualityScore}%</p>
-                  <p className="text-xs text-gray-600 mt-1">form score</p>
-                </div>
-              </div>
+              )}
             </div>
             
-            <p className="text-xs text-gray-600 text-center mt-3">
-              Play the video to start accurate rep counting. The AI will analyze your form in real-time.
-            </p>
+            {videoRef.current && videoRef.current.readyState >= 2 && (
+              <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+                ✓ Video đã sẵn sàng để phân tích
+              </p>
+            )}
           </div>
-        ) : (
-          <div
-            className={`border-2 border-dashed rounded-lg p-8 text-center transition ${
-              selectedFile ? 'border-blue-400 bg-blue-50' : 'border-gray-300 hover:border-blue-400'
-            }`}
-          >
-            {preview ? (
-              <div>
-                <video
-                  src={preview}
-                  controls
-                  className="w-full max-h-48 rounded-lg bg-black mb-4"
-                />
-                <p className="text-sm font-medium text-gray-700 mb-2">
-                  {selectedFile?.name}
-                </p>
-                <p className="text-xs text-gray-600">
-                  {((selectedFile?.size || 0) / 1024 / 1024).toFixed(2)} MB
-                </p>
+
+        {/* Status Bar */}
+        <div className="flex items-center justify-between p-3 bg-white rounded-lg mb-4 border border-gray-200">
+          <div className="flex items-center gap-3 flex-wrap">
+            {isPythonConnected ? (
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                <span className="text-sm text-gray-600">AI Connected</span>
               </div>
             ) : (
-              <div className="py-6">
-                <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-lg font-semibold text-gray-900 mb-2">
-                  Upload Your Video
-                </p>
-                <p className="text-sm text-gray-600 mb-4">
-                  MP4, WebM, or MOV (max 100MB)
-                </p>
+              <div className="flex items-center gap-2">
+                <Loader className="w-4 h-4 text-blue-500 animate-spin" />
+                <span className="text-sm text-gray-600">Connecting...</span>
               </div>
             )}
+            {isPythonProcessing && (
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                <span className="text-sm text-gray-600">Analyzing...</span>
+              </div>
+            )}
+            {pythonMetrics && typeof pythonMetrics.is_valid_form === 'boolean' && pythonMetrics.is_valid_form === false && (
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-orange-500" />
+                <span className="text-sm text-orange-600">Form Issues Detected</span>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={resetPythonAI}
+            disabled={!pythonMetrics || typeof pythonMetrics.reps !== 'number' || pythonMetrics.reps === 0}
+            className="px-4 py-2 text-sm font-medium text-white bg-orange-500 rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Reset
+          </button>
+        </div>
 
-            <input
-              type="file"
-              accept="video/*"
-              onChange={handleFileSelect}
-              disabled={analyzing}
-              className="hidden"
-              id="video-upload"
-            />
-            <label htmlFor="video-upload">
-              <button
-                type="button"
-                onClick={() => document.getElementById('video-upload')?.click()}
-                disabled={analyzing}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400  rounded-lg font-medium transition"
-              >
-                {selectedFile ? 'Choose Another' : 'Select Video'}
-              </button>
-            </label>
+        {/* Real-time Metrics Cards */}
+        {preview && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+            {/* Reps Card */}
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-gray-600 uppercase">Reps</p>
+                <Activity className="w-4 h-4 text-blue-600" />
+              </div>
+              <p className="text-3xl font-bold text-blue-600">
+                {pythonMetrics && typeof pythonMetrics.reps === 'number' ? pythonMetrics.reps : 0}
+              </p>
+              <p className="text-xs text-gray-600 mt-1">
+                Target: {targetTotalReps} | Progress: {
+                  pythonMetrics && typeof pythonMetrics.reps === 'number' 
+                    ? Math.round((pythonMetrics.reps / targetTotalReps) * 100) 
+                    : 0
+                }%
+              </p>
+            </div>
+            
+            {/* State Card */}
+            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-gray-600 uppercase">State</p>
+                <TrendingUp className="w-4 h-4 text-green-600" />
+              </div>
+              <p className="text-2xl font-bold text-green-600 capitalize">
+                {pythonMetrics && pythonMetrics.state ? pythonMetrics.state : 'waiting'}
+              </p>
+              <p className="text-xs text-gray-600 mt-1">Current position</p>
+            </div>
+            
+            {/* Quality Score Card */}
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-gray-600 uppercase">Quality</p>
+                <Award className="w-4 h-4 text-purple-600" />
+              </div>
+              <p className="text-2xl font-bold text-purple-600">
+                {pythonMetrics && typeof pythonMetrics.quality_score === 'number' 
+                  ? pythonMetrics.quality_score.toFixed(0) 
+                  : '--'}%
+              </p>
+              <p className="text-xs text-gray-600 mt-1">
+                {pythonMetrics 
+                  ? (typeof pythonMetrics.is_valid_form === 'boolean'
+                      ? (pythonMetrics.is_valid_form ? 'Valid form' : 'Form issues')
+                      : 'Analyzing...')
+                  : 'Waiting for data'}
+              </p>
+            </div>
+
+            {/* Form Errors Card */}
+            {pythonMetrics && Array.isArray(pythonMetrics.form_errors) && pythonMetrics.form_errors.length > 0 && (
+              <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border border-red-200">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-gray-600 uppercase">Form Errors</p>
+                  <AlertCircle className="w-4 h-4 text-red-600" />
+                </div>
+                <div className="space-y-1">
+                  {pythonMetrics.form_errors.slice(0, 2).map((error, idx) => (
+                    <div key={idx} className="flex items-start gap-1">
+                      <span className="text-red-600 text-xs">•</span>
+                      <p className="text-xs text-red-700">{error.message}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Error Message */}
-        {error && (
-          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-red-600" />
-            <p className="text-sm text-red-700">{error}</p>
+        {/* Error Messages */}
+        {(error || pythonError) && (
+          <div className="mt-4 space-y-2">
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-red-800 mb-1">Error</p>
+                  <p className="text-sm text-red-700">{error}</p>
+                </div>
+              </div>
+            )}
+            {pythonError && pythonError !== error && (
+              <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-orange-800 mb-1">Python AI Service Error</p>
+                  <p className="text-sm text-orange-700">{pythonError}</p>
+                  {!isPythonConnected && (
+                    <p className="text-xs text-orange-600 mt-2">
+                      Please ensure the Python AI service is running on port 8000.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -720,34 +964,10 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
               <span className="font-semibold">Challenge:</span> {challengeName}
             </p>
             <p className="text-xs text-gray-600 mt-1">
-              The AI will analyze your form and count reps to ensure you meet the target.
+              Play the video to start real-time analysis. Python AI service will analyze your form and count reps.
             </p>
           </div>
         )}
-
-        {/* Analyze Button */}
-        <button
-          onClick={handleAnalyze}
-          disabled={!selectedFile || analyzing || isLoading}
-          className="w-full mt-6 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400  rounded-lg font-semibold transition flex items-center justify-center gap-2"
-        >
-          {analyzing || isLoading ? (
-            <>
-              <Loader className="w-5 h-5 animate-spin" />
-              Analyzing Video...
-            </>
-          ) : (
-            <>
-              <CheckCircle className="w-5 h-5" />
-              Analyze with AI
-            </>
-          )}
-        </button>
-
-        {/* Info */}
-        <p className="text-xs text-gray-500 text-center mt-3">
-          Processing time: ~2-3 seconds per video
-        </p>
       </div>
     </div>
   );

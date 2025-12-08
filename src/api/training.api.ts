@@ -38,12 +38,13 @@ export const TrainingAPI = {
    * @param startDate - Start date (optional, format: YYYY-MM-DD, userId from JWT)
    * @returns Promise with start confirmation including utId
    */
-  startTrainingPlan(planId: string, startDate?: string): Promise<{
+  startTrainingPlan(planId: number, startDate?: string): Promise<{
     success: boolean;
     message: string;
     data?: {
       utId: number;
       trainingPlanId: number;
+      email: string ;
       userId: number;
       startDate: string;
       endDate: string;

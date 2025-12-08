@@ -16,22 +16,7 @@ export const MyChallengePage: React.FC = () => {
   });
   const [statsLoading, setStatsLoading] = useState(true);
 
-  // Loading state
-  if (isLoading) {
-    return <p>Loading...</p>;
-  }
-
-  // Not login
-  if (!isAuthenticated || !user) {
-    return <p>Please login to see your challenge.</p>;
-  }
-
-  const userName = user.fullName;
-  const userAvatar =
-    user.linkImage ||
-    "https://api.dicebear.com/7.x/avataaars/svg?seed=MyFit";
-
-  // Load stats from backend
+  // Load stats from backend - MUST be called before any early returns (Rules of Hooks)
   useEffect(() => {
     if (!user?.id) return;
 
@@ -51,6 +36,21 @@ export const MyChallengePage: React.FC = () => {
     loadStats();
   }, [user?.id]);
 
+  // Loading state
+  if (isLoading) {
+    return <p>Loading...</p>;
+  }
+
+  // Not login
+  if (!isAuthenticated || !user) {
+    return <p>Please login to see your challenge.</p>;
+  }
+
+  const userName = user.fullName;
+  const userAvatar =
+    user.linkImage ||
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=MyFit";
+
   const handleBackToPlans = () => {
     setSelectedPlan(null);
   };
@@ -58,16 +58,22 @@ export const MyChallengePage: React.FC = () => {
   if (selectedPlan) {
     console.log('Navigating to training plan detail:');
     console.log('  selectedPlan:', selectedPlan);
-    console.log('  trainingPlanId:', selectedPlan.trainingPlanId || selectedPlan.id);
-    console.log('  utId:', selectedPlan.id); // utId is the UserTraining ID
+    console.log('  trainingPlanId (template):', selectedPlan.trainingPlanId);
+    console.log('  utId (UserTraining ID):', selectedPlan.id);
+    
+    // IMPORTANT: 
+    // - trainingPlanId: ID của template plan (dùng để load plan details)
+    // - utId: ID của UserTraining record (dùng để load personalized data)
+    const templatePlanId = selectedPlan.trainingPlanId || selectedPlan.id;
+    const userTrainingId = selectedPlan.id;
     
     return (
       <TrainingPlanDetailPage
-        trainingPlanId={selectedPlan.trainingPlanId || selectedPlan.id}
+        trainingPlanId={templatePlanId} // Template plan ID để load details
         userName={userName}
         userAvatar={userAvatar}
         onBack={handleBackToPlans}
-        utId={selectedPlan.id} // Pass utId for personalized data
+        utId={userTrainingId} // UserTraining ID để load personalized data
       />
     );
   }

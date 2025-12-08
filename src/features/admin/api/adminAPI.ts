@@ -1,4 +1,5 @@
 import client from "../../../api/client";
+import { getExercises } from "../../../api/fitnessAI.api";
 import {
   AdminUser,
   UserPayload,
@@ -284,7 +285,17 @@ export const challengeAPI = {
   create: AdminAPI.createChallenge,
   update: AdminAPI.updateChallenge,
   delete: AdminAPI.deleteChallenge,
-  bulkUpdate: AdminAPI.bulkUpdateChallenges
+  bulkUpdate: AdminAPI.bulkUpdateChallenges,
+  // Get available AI models/exercises from Fitness AI Service
+  getAvailableExercises: async (): Promise<string[]> => {
+    try {
+      return await getExercises();
+    } catch (error) {
+      console.error("Error fetching exercises from AI service:", error);
+      // Return default list if service is unavailable
+      return ["push-up", "squat", "pull-up", "sit-up", "plank"];
+    }
+  }
 };
 
 // Reward API for Reward Management
@@ -316,7 +327,12 @@ export const trainingPlanAPI = {
   delete: AdminAPI.deleteTrainingPlan,
   getById: (userId: number) => client.get(`/admin/users/${userId}/training-plans`),
   assignTrainingPlan: (userId: number, trainingPlanId: number) => client.post(`/admin/users/${userId}/training-plans/${trainingPlanId}`),
-  removeTrainingPlan: (userId: number, trainingPlanId: number) => client.delete(`/admin/users/${userId}/training-plans/${trainingPlanId}`)
+  removeTrainingPlan: (userId: number, trainingPlanId: number) => client.delete(`/admin/users/${userId}/training-plans/${trainingPlanId}`),
+  // Personalized Plan Details (for admin to view/edit user's customized plan)
+  getPersonalizedDetails: (userId: number, utId: number) => 
+    client.get(`/admin/users/${userId}/training-plans/${utId}/personalized-details`),
+  updatePersonalizedDetail: (userId: number, utId: number, ppdId: number, data: any) =>
+    client.put(`/admin/users/${userId}/training-plans/${utId}/personalized-details/${ppdId}`, data)
 };
 
 // Goal API for Goal Management

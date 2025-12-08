@@ -31,7 +31,8 @@ interface UserBodyData {
 }
 
 interface UserTrainingPlan {
-  id: number;
+  id: number; // This is utId (UserTraining ID)
+  trainingPlanId?: number; // Template training plan ID
   name: string;
   startDate: string;
   endDate: string;
@@ -51,6 +52,8 @@ interface TrainingPlanDetail {
   duration?: number;
   restTime?: number;
   instructions?: string;
+  difficulty?: string; // For PersonalizedPlanDetail
+  targetMuscle?: string; // For PersonalizedPlanDetail
 }
 
 interface UserNutritionPlan {
@@ -576,31 +579,59 @@ export function UserDetailPage({ user, onBack }: UserDetailProps) {
                           onClick={async () => {
                             try {
                               setSelectedPlanId(plan.id);
-                              const response = await client.get(
-                                `/admin/training-plan-details/${plan.id}`
-                              );
+                              
+                              // Load PersonalizedPlanDetail instead of template
+                              // plan.id is utId (UserTraining ID)
+                              const response = await trainingPlanAPI.getPersonalizedDetails(user.id, plan.id);
                               const details = response.data?.data || [];
                               
-                              // Map backend response (tpdId) to frontend format (id)
-                              const mappedDetails: TrainingPlanDetail[] = details.map((detail: any) => ({
-                                id: detail.id || detail.tpdId, // Use id if exists, otherwise use tpdId
-                                trainingPlanId: detail.trainingPlanId,
-                                dayNumber: detail.dayNumber,
-                                dayName: `Day ${detail.dayNumber}`,
-                                challengeId: detail.challenge?.id || detail.challengeId || 0,
-                                challengeName: detail.challengeName || detail.challenge?.title || "",
-                                sets: detail.sets || 0,
-                                reps: detail.reps || 0,
-                                duration: detail.duration,
-                                restTime: detail.restTime,
-                                instructions: detail.instructions,
-                              }));
+                              if (details.length === 0) {
+                                // Fallback to template if no personalized details
+                                console.log("⚠️ No personalized details found, loading template...");
+                                const templateResponse = await client.get(
+                                  `/admin/training-plan-details/${plan.trainingPlanId || plan.id}`
+                                );
+                                const templateDetails = templateResponse.data?.data || [];
+                                
+                                const mappedDetails: TrainingPlanDetail[] = templateDetails.map((detail: any) => ({
+                                  id: detail.id || detail.tpdId,
+                                  trainingPlanId: detail.trainingPlanId,
+                                  dayNumber: detail.dayNumber,
+                                  dayName: `Day ${detail.dayNumber}`,
+                                  challengeId: detail.challenge?.id || detail.challengeId || 0,
+                                  challengeName: detail.challengeName || detail.challenge?.title || "",
+                                  sets: detail.sets || 0,
+                                  reps: detail.reps || 0,
+                                  duration: detail.duration,
+                                  restTime: detail.restTime,
+                                  instructions: detail.instructions,
+                                }));
+                                setPlanDetails(mappedDetails);
+                              } else {
+                                // Map PersonalizedPlanDetail to TrainingPlanDetail format
+                                const mappedDetails: TrainingPlanDetail[] = details.map((detail: any) => ({
+                                  id: detail.id || detail.ppdId, // PersonalizedPlanDetail ID
+                                  trainingPlanId: plan.trainingPlanId || plan.id,
+                                  dayNumber: detail.dayNumber,
+                                  dayName: `Day ${detail.dayNumber}`,
+                                  challengeId: detail.challengeId || 0,
+                                  challengeName: detail.challengeName || detail.exerciseName || "",
+                                  sets: detail.sets || 0,
+                                  reps: detail.reps || 0,
+                                  difficulty: detail.difficulty,
+                                  targetMuscle: detail.targetMuscle,
+                                  // PersonalizedPlanDetail doesn't have duration/restTime/instructions
+                                  duration: undefined,
+                                  restTime: undefined,
+                                  instructions: undefined,
+                                }));
+                                setPlanDetails(mappedDetails);
+                              }
                               
-                              setPlanDetails(mappedDetails);
                               setIsEditingPlan(true);
                               // Initialize editing state
                               const editingState: { [key: number]: TrainingPlanDetail } = {};
-                              mappedDetails.forEach((detail: TrainingPlanDetail) => {
+                              planDetails.forEach((detail: TrainingPlanDetail) => {
                                 if (detail.id) {
                                   editingState[detail.id] = { ...detail };
                                 }
@@ -622,7 +653,7 @@ export function UserDetailPage({ user, onBack }: UserDetailProps) {
                             }
                           }}
                           className="p-2 hover:bg-blue-100 rounded text-blue-600 transition"
-                          title="Edit Training Plan Details"
+                          title="Edit Personalized Training Plan Details"
                         >
                           <Edit2 size={16} />
                         </button>
@@ -1267,16 +1298,35 @@ export function UserDetailPage({ user, onBack }: UserDetailProps) {
                               return Promise.resolve();
                             }
                             
-                            return client.put(`/admin/training-plan-details/${detail.id}`, {
-                              trainingPlanId: detail.trainingPlanId,
-                              dayNumber: detail.dayNumber,
-                              challengeId: detail.challengeId,
-                              sets: detail.sets,
-                              reps: detail.reps,
-                              duration: detail.duration,
-                              restTime: detail.restTime,
-                              instructions: detail.instructions,
-                            });
+                            // Check if this is a PersonalizedPlanDetail (from personalized API) or template
+                            // If selectedPlanId exists and we loaded personalized details, use personalized API
+                            if (selectedPlanId && planDetails.length > 0 && planDetails[0].id === detail.id) {
+                              // This is a PersonalizedPlanDetail - use personalized update API
+                              return trainingPlanAPI.updatePersonalizedDetail(
+                                user.id,
+                                selectedPlanId,
+                                detail.id,
+                                {
+                                  sets: detail.sets,
+                                  reps: detail.reps,
+                                  difficulty: detail.difficulty,
+                                  targetMuscle: detail.targetMuscle,
+                                  exerciseName: detail.challengeName,
+                                }
+                              );
+                            } else {
+                              // This is a template TrainingPlanDetail - use template API
+                              return client.put(`/admin/training-plan-details/${detail.id}`, {
+                                trainingPlanId: detail.trainingPlanId,
+                                dayNumber: detail.dayNumber,
+                                challengeId: detail.challengeId,
+                                sets: detail.sets,
+                                reps: detail.reps,
+                                duration: detail.duration,
+                                restTime: detail.restTime,
+                                instructions: detail.instructions,
+                              });
+                            }
                           });
                           
                           await Promise.all(savePromises);
