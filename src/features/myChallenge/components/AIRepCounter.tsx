@@ -1004,11 +1004,12 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
                     <p className="text-xs text-gray-400">
                       Target: {targetTotalReps}
                     </p>
-                    <div className="mt-2 w-full bg-gray-700 rounded-full h-2">
+                    <div className="mt-2 w-full bg-gray-700 rounded-full h-2 overflow-hidden relative">
                       <div
-                        className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                        className="bg-blue-500 h-2 rounded-full transition-all duration-300 ease-out"
                         style={{
-                          width: `${Math.min(((pythonMetrics && typeof pythonMetrics.reps === 'number' ? pythonMetrics.reps : 0) / targetTotalReps) * 100, 100)}%`,
+                          width: `${Math.max(0, Math.min(100, ((pythonMetrics && typeof pythonMetrics.reps === 'number' ? pythonMetrics.reps : 0) / targetTotalReps) * 100))}%`,
+                          minWidth: ((pythonMetrics && typeof pythonMetrics.reps === 'number' ? pythonMetrics.reps : 0) / targetTotalReps) * 100 > 0 ? '2px' : '0px'
                         }}
                       />
                     </div>

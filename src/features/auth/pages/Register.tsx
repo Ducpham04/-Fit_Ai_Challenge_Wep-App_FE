@@ -26,8 +26,9 @@ export const Register = () => {
     try {
       await register(username, email, password);
       navigate('/');
-    } catch (error) {
-      alert('Registration failed.');
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      alert(error?.message || 'Registration failed. Please try again.');
     } finally {
       setIsLoading(false);
     }

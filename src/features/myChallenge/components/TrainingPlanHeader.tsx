@@ -65,10 +65,13 @@ export const TrainingPlanHeader: React.FC<TrainingPlanHeaderProps> = ({
           <span className="text-sm font-medium text-gray-700">Progress</span>
           <span className="text-sm font-bold text-gray-900">{progressPercentage}%</span>
         </div>
-        <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+        <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden relative">
           <div
-            className="bg-gradient-to-r from-blue-500 to-blue-600 h-full transition-all duration-500"
-            style={{ width: `${progressPercentage}%` }}
+            className="bg-gradient-to-r from-blue-500 to-blue-600 h-full transition-all duration-500 ease-out rounded-full"
+            style={{ 
+              width: `${Math.max(0, Math.min(100, progressPercentage))}%`,
+              minWidth: progressPercentage > 0 ? '2px' : '0px'
+            }}
           />
         </div>
         <div className="text-xs text-gray-600 text-right">

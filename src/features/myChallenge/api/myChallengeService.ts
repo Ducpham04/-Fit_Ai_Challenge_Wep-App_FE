@@ -291,8 +291,35 @@ export const saveDailyTrainingLog = async (
     console.error('   - Error message:', error?.message);
     console.error('   - Error response:', error?.response?.data);
     console.error('   - Error status:', error?.response?.status);
+    console.error('   - Error config:', error?.config);
     console.error('   - Full error:', error);
-    throw error;
+    
+    // Provide more detailed error message
+    let errorMessage = 'Failed to save DailyTrainingLog';
+    
+    if (error?.response) {
+      // Server responded with error
+      const responseData = error.response.data;
+      if (responseData?.message) {
+        errorMessage = responseData.message;
+      } else if (responseData?.error) {
+        errorMessage = responseData.error;
+      } else {
+        errorMessage = `Server error: ${error.response.status} ${error.response.statusText}`;
+      }
+    } else if (error?.request) {
+      // Request was made but no response received
+      errorMessage = 'Network error: No response from server. Please check your connection.';
+    } else if (error?.message) {
+      // Error setting up request
+      errorMessage = `Request error: ${error.message}`;
+    }
+    
+    const detailedError = new Error(errorMessage);
+    (detailedError as any).originalError = error;
+    (detailedError as any).status = error?.response?.status;
+    (detailedError as any).responseData = error?.response?.data;
+    throw detailedError;
   }
 };
 

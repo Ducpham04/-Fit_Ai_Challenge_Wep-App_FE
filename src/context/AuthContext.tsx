@@ -13,6 +13,8 @@ interface User {
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
+  register: (fullName: string, email: string, password: string) => Promise<void>;
+  refreshUser: () => Promise<void>;
   logout: () => void;
   isLoading: boolean;
   isAuthenticated: boolean;
@@ -98,6 +100,94 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }
 };
 
+  const register = async (fullName: string, email: string, password: string) => {
+    setIsLoading(true);
+    try {
+      // Call register API with correct format
+      const res = await AuthAPI.register({
+        fullName: fullName,
+        email: email,
+        password: password,
+        roleId: null // Will default to 2 (USER) in backend
+      });
+      
+      console.log("Register response:", res.data);
+      
+      // Get token from response
+      const token = res.data.token || res.data.access_token || res.data.accessToken;
+      
+      if (!token) {
+        console.error("❌ Token not found in register response:", res.data);
+        throw new Error("No token received from registration");
+      }
+      
+      console.log("✅ Token saved:", token);
+      tokenService.updateLocalAccessToken(token);
+
+      // Get user info from response or fetch profile
+      let userData;
+      if (res.data.user) {
+        // User object from response (UserInfoDTO)
+        userData = {
+          id: res.data.user.id?.toString() || '',
+          email: res.data.user.email || email,
+          fullName: res.data.user.fullName || fullName,
+          role: res.data.user.role || 'USER'
+        };
+      } else {
+        // Fetch user profile after registration
+        try {
+          const me = await AuthAPI.getProfile();
+          userData = me.data;
+        } catch (err) {
+          console.warn("/auth/user failed, trying /auth/me...", err);
+          try {
+            const me = await AuthAPI.me();
+            userData = me.data;
+          } catch (err2) {
+            // If both fail, create user data from response or fallback
+            console.warn("Could not fetch user profile, using response data as fallback");
+            userData = {
+              id: res.data.userInfo?.id?.toString() || '',
+              email: res.data.userInfo?.email || email,
+              fullName: res.data.userInfo?.fullName || fullName,
+              role: res.data.userInfo?.role || 'USER'
+            };
+          }
+        }
+      }
+      
+      setUser(userData);
+      
+      // Store user ID for easy access
+      if (userData?.id) {
+        localStorage.setItem('userId', userData.id.toString());
+      }
+      
+      return userData;
+    } catch (err: any) {
+      console.error("❌ Register error:", err);
+      const errorMessage = err?.response?.data?.message || err?.message || "Registration failed. Please try again.";
+      throw new Error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const refreshUser = async () => {
+    try {
+      let res = await AuthAPI.getProfile();
+      setUser(res.data);
+    } catch (err) {
+      console.warn("/auth/user failed, trying /auth/me...", err);
+      try {
+        const res = await AuthAPI.me();
+        setUser(res.data);
+      } catch (err2) {
+        console.error("Failed to refresh user:", err2);
+      }
+    }
+  };
 
   const logout = () => {
     tokenService.clearTokens();
@@ -105,7 +195,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, login, register, refreshUser, logout, isLoading, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );

@@ -31,8 +31,11 @@ export interface UserActivity {
 
 export interface UserGoals {
   weeklyWorkouts: number;
-  dailyCalories: number;
+  weeklyWorkoutsTarget?: number;
+  dailyCalories: number | null;
   monthlyDistance: number | null;
+  goalName?: string | null;
+  goalId?: number | null;
 }
 
 export interface WeeklyStats {

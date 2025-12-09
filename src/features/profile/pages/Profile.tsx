@@ -85,7 +85,7 @@ export const Profile = () => {
             <div className="flex flex-col md:flex-row items-center gap-6 -mt-16">
 
               <img
-                src={user.avatar}
+                src={"http://localhost:8080/" + user.avatar}
                 alt={user.username}
                 className="w-32 h-32 rounded-full border-4 border-white shadow-lg"
               />
@@ -228,13 +228,70 @@ export const Profile = () => {
                 <h2 className="text-xl text-gray-900">My Goals</h2>
               </div>
 
-              <GoalItem label="Weekly Workouts" value={goals.weeklyWorkouts} />
-              <GoalItem label="Daily Calories" value={goals.dailyCalories + " kcal"} />
-              <GoalItem label="Monthly Distance" value={(goals.monthlyDistance ?? 0) + " km"} />
+              {goals && (goals.weeklyWorkouts !== null || goals.dailyCalories !== null || goals.goalName) ? (
+                <>
+                  {/* Show primary goal name */}
+                  {goals.goalName && (
+                    <div className="mb-4 p-3 bg-gradient-to-r from-sky-50 to-lime-50 rounded-lg border border-sky-200">
+                      <p className="text-xs text-gray-600 mb-1">Primary Goal</p>
+                      <p className="text-sm font-semibold text-sky-700">{goals.goalName}</p>
+                    </div>
+                  )}
 
-              <button className="w-full mt-6 py-2 border-2 border-sky-500 text-sky-500 rounded-lg hover:bg-sky-50">
-                Edit Goals
-              </button>
+                  {/* Weekly Workouts */}
+                  {goals.weeklyWorkouts !== null && goals.weeklyWorkouts !== undefined && (
+                    <GoalItem 
+                      label="Weekly Workouts" 
+                      value={goals.weeklyWorkouts} 
+                      target={goals.weeklyWorkoutsTarget || 5}
+                      unit=""
+                    />
+                  )}
+
+                  {/* Daily Calories */}
+                  {goals.dailyCalories !== null && goals.dailyCalories !== undefined && goals.dailyCalories > 0 && (
+                    <GoalItem 
+                      label="Daily Calories Target" 
+                      value={`${goals.dailyCalories} kcal`}
+                      target={goals.dailyCalories}
+                      unit="kcal"
+                    />
+                  )}
+
+                  {/* Monthly Distance */}
+                  {goals.monthlyDistance !== null && goals.monthlyDistance !== undefined && goals.monthlyDistance > 0 && (
+                    <GoalItem 
+                      label="Monthly Distance" 
+                      value={`${goals.monthlyDistance} km`}
+                      target={goals.monthlyDistance}
+                      unit="km"
+                    />
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-6">
+                  <Target className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 mb-4">No goals set yet</p>
+                  <p className="text-sm text-gray-400 mb-4">
+                    Complete your body profile to get personalized goals
+                  </p>
+                  <button
+                    onClick={() => navigate("/profile/body-profile")}
+                    className="w-full py-2 bg-gradient-to-r from-sky-400 to-lime-400 text-white rounded-lg hover:shadow-lg transition-shadow"
+                  >
+                    Set Up Goals
+                  </button>
+                </div>
+              )}
+
+              {goals && (goals.weeklyWorkouts || goals.dailyCalories) && (
+                <button 
+                  onClick={() => navigate("/profile/body-profile")}
+                  className="w-full mt-6 py-2 border-2 border-sky-500 text-sky-500 rounded-lg hover:bg-sky-50 transition-colors"
+                >
+                  Edit Goals
+                </button>
+              )}
             </div>
           </div>
 
@@ -262,6 +319,8 @@ interface ActivityBoxProps {
 interface GoalItemProps {
   label: string;
   value: string | number;
+  target?: number;
+  unit?: string;
 }
 
 // COMPONENTS
@@ -292,20 +351,59 @@ const ActivityBox = ({ value, label }: ActivityBoxProps) => (
   </div>
 );
 
-const GoalItem = ({ label, value }: GoalItemProps) => (
-  <div className="mb-4">
-    <div className="flex justify-between mb-2">
-      <span className="text-gray-700">{label}</span>
-      <span className="text-sky-500">{value}</span>
+const GoalItem = ({ label, value, target, unit }: GoalItemProps) => {
+  // Extract number from value if it's a string like "2000 kcal"
+  const numericValue = typeof value === 'string' 
+    ? parseFloat(value.replace(/[^\d.]/g, '')) || 0
+    : (value as number) || 0;
+  
+  // Calculate percentage (use target if provided, otherwise use value as 100%)
+  const percentage = target && target > 0
+    ? Math.min((numericValue / target) * 100, 100)
+    : 0;
+
+  const displayUnit = unit || (typeof value === 'string' && value.includes('kcal') ? 'kcal' : typeof value === 'string' && value.includes('km') ? 'km' : '');
+
+  return (
+    <div className="mb-4">
+      <div className="flex justify-between items-center mb-2">
+        <span className="text-gray-700 font-medium">{label}</span>
+        <div className="text-right">
+          <span className="text-sky-600 font-semibold">{numericValue}</span>
+          {target && target > 0 && (
+            <span className="text-gray-500 text-sm ml-1">/ {target}</span>
+          )}
+          {displayUnit && (
+            <span className="text-gray-500 text-sm ml-1">{displayUnit}</span>
+          )}
+        </div>
+      </div>
+      {target && target > 0 ? (
+        <>
+          <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden relative">
+            <div
+              className="h-full bg-gradient-to-r from-sky-400 to-sky-600 rounded-full transition-all duration-500 ease-out"
+              style={{ 
+                width: `${Math.max(0, Math.min(100, percentage))}%`,
+                minWidth: percentage > 0 ? '2px' : '0px'
+              }}
+            />
+          </div>
+          <p className="text-xs text-gray-500 mt-1 text-right">
+            {percentage.toFixed(0)}% complete
+          </p>
+        </>
+      ) : (
+        <div className="w-full h-2 bg-gray-200 rounded-full">
+          <div
+            className="h-full bg-gradient-to-r from-sky-400 to-sky-600 rounded-full"
+            style={{ width: '100%' }}
+          />
+        </div>
+      )}
     </div>
-    <div className="w-full h-2 bg-gray-200 rounded-full">
-      <div
-        className="h-full bg-sky-500 rounded-full"
-        style={{ width: `${Math.min(Number(value) || 0, 100)}%` }}
-      />
-    </div>
-  </div>
-);
+  );
+};
 
 interface InfoRowProps {
   label: string;

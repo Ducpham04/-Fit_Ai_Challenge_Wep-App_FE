@@ -271,10 +271,13 @@ export const MyTrainingPlans: React.FC<MyTrainingPlansProps> = ({ onSelectPlan, 
                 {plan.progressPercentage || 0}%
               </span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner">
+            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner relative">
               <div
-                className="bg-gradient-to-r from-blue-500 via-blue-600 to-purple-600 h-full transition-all duration-500 rounded-full"
-                style={{ width: `${plan.progressPercentage || 0}%` }}
+                className="bg-gradient-to-r from-blue-500 via-blue-600 to-purple-600 h-full transition-all duration-500 ease-out rounded-full"
+                style={{ 
+                  width: `${Math.max(0, Math.min(100, plan.progressPercentage || 0))}%`,
+                  minWidth: (plan.progressPercentage || 0) > 0 ? '2px' : '0px'
+                }}
               />
             </div>
           </div>

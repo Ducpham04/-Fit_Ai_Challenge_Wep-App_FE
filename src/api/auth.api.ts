@@ -14,7 +14,10 @@ export const AuthAPI = {
   }
   ,
   me() {
-  return client.get("/auth/me");
-}
+    return client.get("/auth/me");
+  },
 
+  updateProfile(data: { userName?: string; email?: string; linkImage?: string }) {
+    return client.put("/auth/profile", data);
+  }
 };

@@ -67,6 +67,8 @@ export function TrainingPlanDetailsPage({ plan, onBack }: TrainingPlanDetailsPag
   const [challenges, setChallenges] = useState<any[]>([]);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; name: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [editingDetail, setEditingDetail] = useState<TrainingPlanDetailDTO | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [newDayForm, setNewDayForm] = useState<{
     dayNumber: number;
     challengeId: number;
@@ -97,7 +99,7 @@ export function TrainingPlanDetailsPage({ plan, onBack }: TrainingPlanDetailsPag
         setError(null);
 
         // Load training plan details
-        const detailsResponse = await client.get(`/admin/training-plan-details/${planId}`);
+        const detailsResponse = await client.get(`/admin/training-plan-details/plan/${planId}`);
         const detailsData = detailsResponse.data?.data || [];
         setPlanDetails(detailsData);
 
@@ -456,8 +458,11 @@ export function TrainingPlanDetailsPage({ plan, onBack }: TrainingPlanDetailsPag
                           <div className="flex gap-2">
                             <button 
                               onClick={() => {
-                                // TODO: Implement edit functionality
-                                alert("Edit functionality coming soon");
+                                // Find the detail from planDetails
+                                const detail = planDetails.find(d => d.tpdId === exercise.id);
+                                if (detail) {
+                                  setEditingDetail(detail);
+                                }
                               }}
                               className="p-1 hover:bg-blue-100 rounded text-blue-600 transition"
                               title="Edit exercise"
@@ -554,7 +559,7 @@ export function TrainingPlanDetailsPage({ plan, onBack }: TrainingPlanDetailsPag
                         if (response.data?.success) {
                           // Reload plan details
                           const detailsResponse = await client.get(
-                            `/admin/training-plan-details/${plan.id}`
+                            `/admin/training-plan-details/plan/${plan.id}`
                           );
                           const updatedDetails = detailsResponse.data?.data || [];
                           setPlanDetails(updatedDetails);
@@ -585,6 +590,186 @@ export function TrainingPlanDetailsPage({ plan, onBack }: TrainingPlanDetailsPag
                     )}
                   </Button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Detail Modal */}
+        {editingDetail && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Edit Training Plan Detail</h2>
+                  <p className="text-sm text-gray-600 mt-1">Update exercise details for Day {editingDetail.dayNumber}</p>
+                </div>
+                <button
+                  onClick={() => setEditingDetail(null)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition"
+                >
+                  <X size={24} className="text-gray-600" />
+                </button>
+              </div>
+
+              {/* Form */}
+              <div className="p-6 overflow-y-auto flex-1">
+                <div className="space-y-4">
+                  {/* Day Number */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Day Number
+                    </label>
+                    <input
+                      type="number"
+                      value={editingDetail.dayNumber}
+                      onChange={(e) => setEditingDetail({
+                        ...editingDetail,
+                        dayNumber: parseInt(e.target.value) || 1
+                      })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      min="1"
+                    />
+                  </div>
+
+                  {/* Challenge Selection */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Challenge
+                    </label>
+                    <select
+                      value={editingDetail.challenge.id}
+                      onChange={(e) => {
+                        const selectedChallenge = challenges.find(c => c.id === parseInt(e.target.value));
+                        if (selectedChallenge) {
+                          setEditingDetail({
+                            ...editingDetail,
+                            challenge: {
+                              ...editingDetail.challenge,
+                              id: selectedChallenge.id,
+                              title: selectedChallenge.title || selectedChallenge.name,
+                            },
+                            challengeName: selectedChallenge.title || selectedChallenge.name
+                          });
+                        }
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value={0}>Select a challenge</option>
+                      {challenges.map((challenge) => (
+                        <option key={challenge.id} value={challenge.id}>
+                          {challenge.title || challenge.name} ({challenge.difficult || challenge.difficulty})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Sets and Reps */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Sets
+                      </label>
+                      <input
+                        type="number"
+                        value={editingDetail.sets}
+                        onChange={(e) => setEditingDetail({
+                          ...editingDetail,
+                          sets: parseInt(e.target.value) || 0
+                        })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        min="1"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Reps
+                      </label>
+                      <input
+                        type="number"
+                        value={editingDetail.reps}
+                        onChange={(e) => setEditingDetail({
+                          ...editingDetail,
+                          reps: parseInt(e.target.value) || 0
+                        })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        min="1"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Current Challenge Info */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm font-medium text-blue-900 mb-1">Current Challenge</p>
+                    <p className="text-sm text-blue-700">{editingDetail.challengeName || editingDetail.challenge.title}</p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      Difficulty: {editingDetail.challenge.difficult}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
+                <Button
+                  variant="outline"
+                  onClick={() => setEditingDetail(null)}
+                  disabled={isUpdating}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={async () => {
+                    if (!editingDetail) return;
+                    
+                    try {
+                      setIsUpdating(true);
+                      
+                      const response = await client.put(
+                        `/admin/training-plan-details/${editingDetail.tpdId}`,
+                        {
+                          trainingPlanId: editingDetail.trainingPlanId,
+                          dayNumber: editingDetail.dayNumber,
+                          challengeId: editingDetail.challenge.id,
+                          sets: editingDetail.sets,
+                          reps: editingDetail.reps,
+                        }
+                      );
+
+                      if (response.data?.success) {
+                        // Reload plan details
+                        const detailsResponse = await client.get(
+                          `/admin/training-plan-details/plan/${plan.id}`
+                        );
+                        const updatedDetails = detailsResponse.data?.data || [];
+                        setPlanDetails(updatedDetails);
+                        
+                        setEditingDetail(null);
+                        // Show success message
+                        alert("Training plan detail updated successfully!");
+                      } else {
+                        alert(response.data?.message || "Error updating detail");
+                      }
+                    } catch (error: any) {
+                      console.error("Error updating detail:", error);
+                      alert(error?.response?.data?.message || "Error updating training plan detail");
+                    } finally {
+                      setIsUpdating(false);
+                    }
+                  }}
+                  disabled={isUpdating}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {isUpdating ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Updating...
+                    </span>
+                  ) : (
+                    "Update Detail"
+                  )}
+                </Button>
               </div>
             </div>
           </div>
@@ -766,7 +951,7 @@ export function TrainingPlanDetailsPage({ plan, onBack }: TrainingPlanDetailsPag
                       if (response.data?.success) {
                         // Reload plan details
                         const detailsResponse = await client.get(
-                          `/admin/training-plan-details/${plan.id}`
+                          `/admin/training-plan-details/plan/${plan.id}`
                         );
                         const updatedDetails = detailsResponse.data?.data || [];
                         setPlanDetails(updatedDetails);

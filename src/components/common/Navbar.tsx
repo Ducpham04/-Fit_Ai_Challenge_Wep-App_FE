@@ -61,12 +61,25 @@ export const Navbar = () => {
                   to="/profile"
                   className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors"
                 >
-                  <img
-                    src={user?.avatar}
-                    alt={user?.fullName}
-                    className="w-8 h-8 rounded-full"
-                  />
-                  <span className="text-gray-700">{user?.fullName}</span>
+                  {user?.linkImage || user?.profileImage ? (
+                    <img
+                      src={user.linkImage?.startsWith('http') ? user.linkImage : `http://localhost:8080/${user.linkImage || user.profileImage}`}
+                      alt={user?.fullName || 'User'}
+                      className="w-8 h-8 rounded-full object-cover border-2 border-gray-200"
+                      onError={(e) => {
+                        // Fallback to default avatar if image fails to load
+                        const target = e.target as HTMLImageElement;
+                        target.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email || user?.id || 'user'}`;
+                      }}
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-r from-sky-400 to-lime-400 flex items-center justify-center border-2 border-gray-200">
+                      <span className="text-white text-xs font-bold">
+                        {(user?.fullName || user?.email || 'U').charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                  )}
+                  <span className="text-gray-700 font-medium">{user?.fullName || user?.email || 'User'}</span>
                 </Link>
                 <button
                   onClick={logout}
@@ -136,8 +149,35 @@ export const Navbar = () => {
                     onClick={() => setIsOpen(false)}
                     className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-50"
                   >
+                    {user?.linkImage || user?.profileImage ? (
+                      <img
+                        src={user.linkImage?.startsWith('http') ? user.linkImage : `http://localhost:8080/${user.linkImage || user.profileImage}`}
+                        alt={user?.fullName || 'User'}
+                        className="w-8 h-8 rounded-full object-cover border-2 border-gray-200"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email || user?.id || 'user'}`;
+                        }}
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-r from-sky-400 to-lime-400 flex items-center justify-center border-2 border-gray-200">
+                        <span className="text-white text-xs font-bold">
+                          {(user?.fullName || user?.email || 'U').charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex flex-col">
+                      <span className="font-medium text-gray-900">{user?.fullName || user?.email || 'User'}</span>
+                      <span className="text-xs text-gray-500">View Profile</span>
+                    </div>
+                  </Link>
+                  <Link
+                    to="/settings"
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-50"
+                  >
                     <User className="w-5 h-5" />
-                    <span>Profile</span>
+                    <span>Settings</span>
                   </Link>
                   <button
                     onClick={() => {

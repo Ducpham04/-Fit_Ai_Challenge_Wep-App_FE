@@ -58,7 +58,11 @@ export const LoginEnhanced = () => {
 
     // Clear general error when user starts typing
     if (errors.general) {
-      setErrors(prev => ({ ...prev, general: undefined }));
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors.general;
+        return newErrors;
+      });
     }
   };
 
@@ -72,32 +76,78 @@ export const LoginEnhanced = () => {
     e.preventDefault();
 
     // Validate all fields
-    validateField('email', formData.email);
-    validateField('password', formData.password);
-    setTouched({ email: true, password: true });
+    const emailErrors: {email?: string} = {};
+    const passwordErrors: {password?: string} = {};
+    
+    if (!formData.email) {
+      emailErrors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      emailErrors.email = 'Please enter a valid email';
+    }
+    
+    if (!formData.password) {
+      passwordErrors.password = 'Password is required';
+    } else if (formData.password.length < 6) {
+      passwordErrors.password = 'Password must be at least 6 characters';
+    }
 
-    // Check if there are any errors
-    if (Object.keys(errors).length > 0 || !formData.email || !formData.password) {
+    setTouched({ email: true, password: true });
+    setErrors({ ...emailErrors, ...passwordErrors });
+
+    // Check if there are validation errors
+    if (Object.keys(emailErrors).length > 0 || Object.keys(passwordErrors).length > 0) {
       return;
     }
 
     setIsLoading(true);
-    setErrors({});
+    setErrors({}); // Clear previous errors
 
     try {
       await login(formData.email, formData.password);
+      // Success - user will be redirected by useEffect
     } catch (err: any) {
+      console.error('Login error:', err);
+      
+      // Parse error response
+      let errorMessage = 'Login failed. Please check your credentials.';
+      
+      if (err.response) {
+        const status = err.response.status;
+        const data = err.response.data;
+        
+        if (status === 401) {
+          // Unauthorized - wrong email or password
+          errorMessage = 'Invalid email or password. Please try again.';
+        } else if (status === 400) {
+          // Bad request - validation error
+          errorMessage = data?.message || 'Please check your email and password format.';
+        } else if (status === 404) {
+          // Not found - user doesn't exist
+          errorMessage = 'No account found with this email address.';
+        } else if (status >= 500) {
+          // Server error
+          errorMessage = 'Server error. Please try again later.';
+        } else if (data?.message) {
+          errorMessage = data.message;
+        }
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
       setErrors({
-        general: err.message || 'Login failed. Please check your credentials.'
+        general: errorMessage
       });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const isFormValid = formData.email && formData.password &&
-                     !errors.email && !errors.password &&
-                     touched.email && touched.password;
+  // Form is valid if email and password are filled and have valid format
+  const isFormValid = formData.email && 
+                     formData.password && 
+                     formData.password.length >= 6 &&
+                     /\S+@\S+\.\S+/.test(formData.email) &&
+                     !isLoading;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-400 to-lime-400 p-4">
@@ -216,10 +266,12 @@ export const LoginEnhanced = () => {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isLoading || !isFormValid}
+              disabled={isLoading}
               className={`w-full py-3 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2 ${
-                isFormValid && !isLoading
+                !isLoading && isFormValid
                   ? 'bg-gradient-to-r from-sky-400 to-lime-400 text-white hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]'
+                  : isLoading
+                  ? 'bg-gray-400 text-white cursor-wait'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
             >

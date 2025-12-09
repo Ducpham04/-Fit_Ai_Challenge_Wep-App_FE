@@ -257,7 +257,7 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
       setSelectedChallenge(null);
     } else {
       setExpandedChallengeId(challenge.id || challenge.challengeId);
-      setSelectedChallenge(challenge);
+    setSelectedChallenge(challenge);
     }
   };
 
@@ -268,7 +268,7 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
       setSelectedChallenge(null);
     } else {
       setExpandedChallengeId(challenge.id || challenge.challengeId);
-      setSelectedChallenge(challenge);
+    setSelectedChallenge(challenge);
     }
   };
 
@@ -649,33 +649,107 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
           />
 
           {currentDayData && (
-            <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-lg">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-3xl font-bold text-gray-900">{currentDayData.dayName}</h2>
-                <span className="px-4 py-2 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
+            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-2xl font-bold text-gray-900">{currentDayData.dayName}</h2>
+                <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold">
                   {currentDayData.challenges.length} Challenge{currentDayData.challenges.length !== 1 ? 's' : ''}
                 </span>
               </div>
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3">
                 {currentDayData.challenges.map((challenge) => {
                   const isExpanded = expandedChallengeId === challenge.id || expandedChallengeId === challenge.challengeId;
                   return (
-                    <ChallengeCard
-                      key={challenge.id}
-                      challenge={challenge}
-                      onStartClick={handleChallengeStart}
-                      trainingPlanId={trainingPlanId}
+                  <ChallengeCard
+                    key={challenge.id}
+                    challenge={challenge}
+                    onStartClick={handleChallengeStart}
+                    trainingPlanId={trainingPlanId}
                       isExpanded={isExpanded}
                       expandedContent={isExpanded && selectedChallenge && selectedChallenge.id === challenge.id ? (
                         <ChallengeDetailExpanded
                           challenge={selectedChallenge}
+                          trainingPlanId={trainingPlanId}
+                          dayNumber={selectedDay}
                           onCollapse={() => {
                             setExpandedChallengeId(null);
                             setSelectedChallenge(null);
                           }}
+                          onSaveComplete={async (analysisData) => {
+                            console.log('🔄 [TrainingPlanDetailPage] onSaveComplete called with:', analysisData);
+                            
+                            // Update challenge status in plan state optimistically
+                            if (plan && selectedChallenge && analysisData) {
+                              const updatedPlan = { ...plan };
+                              updatedPlan.dayChallenges = updatedPlan.dayChallenges.map((day) => ({
+                                ...day,
+                                challenges: day.challenges.map((ch) => {
+                                  if (ch.id === selectedChallenge.id || ch.challengeId === selectedChallenge.challengeId) {
+                                    return {
+                                      ...ch,
+                                      status: analysisData.isPassed ? 'COMPLETED' : 'ACTIVE',
+                                      repsCompleted: analysisData.repsCompleted,
+                                      setsCompleted: analysisData.setsCompleted,
+                                      score: analysisData.score,
+                                      aiAnalysis: {
+                                        correctReps: analysisData.repsCompleted,
+                                        totalReps: analysisData.repsCompleted,
+                                        accuracy: analysisData.score,
+                                        feedback: analysisData.isPassed 
+                                          ? 'Excellent! You completed the challenge successfully.' 
+                                          : 'Good effort! Keep practicing to reach the target.',
+                                        posture: analysisData.score >= 80 ? 'Excellent' : analysisData.score >= 60 ? 'Good' : 'Fair',
+                                      },
+                                    };
+                                  }
+                                  return ch;
+                                }),
+                              }));
+                              
+                              // Recalculate progress
+                              const completedCount = updatedPlan.dayChallenges.reduce(
+                                (sum, day) => sum + day.challenges.filter(c => c.status === 'COMPLETED').length,
+                                0
+                              );
+                              const totalChallenges = updatedPlan.dayChallenges.reduce(
+                                (sum, day) => sum + day.challenges.length,
+                                0
+                              );
+                              updatedPlan.progressPercentage = Math.round((completedCount / totalChallenges) * 100);
+                              
+                              setPlan(updatedPlan);
+                              console.log('✅ [TrainingPlanDetailPage] Challenge status updated in plan state');
+                            }
+                            
+                            // Update challenge status via API
+                            try {
+                              const numTrainingPlanId = typeof trainingPlanId === 'string' ? parseInt(trainingPlanId, 10) : trainingPlanId;
+                              if (!isNaN(numTrainingPlanId) && selectedChallenge) {
+                                await updateChallengeStatus(
+                                  numTrainingPlanId,
+                                  selectedChallenge.challengeId,
+                                  analysisData.isPassed ? 'COMPLETED' : 'ACTIVE'
+                                );
+                                console.log('✅ [TrainingPlanDetailPage] Challenge status updated via API');
+                              }
+                            } catch (error) {
+                              console.error('❌ [TrainingPlanDetailPage] Failed to update challenge status:', error);
+                            }
+                            
+                            // Reload plan to get updated data from backend
+                            console.log('🔄 [TrainingPlanDetailPage] Reloading plan after save...');
+                            await loadTrainingPlan();
+                            
+                            // Reload personalized data if utId exists
+                            if (utId && selectedDay) {
+                              const key = `${utId}-${selectedDay}`;
+                              personalizedDataLoadedRef.current.delete(key);
+                              await loadPersonalizedData(utId, selectedDay);
+                            }
+                          }}
                         />
                       ) : null}
-                      onAnalysisComplete={async (challenge, analysis) => {
+                    onAnalysisComplete={async (challenge, analysis) => {
                       console.log('🔵 [TrainingPlanDetailPage] ========== FLOW 1: onAnalysisComplete from ChallengeCard ==========');
                       console.log('🔵 [TrainingPlanDetailPage] Received analysis from ChallengeCard:', {
                         challengeId: challenge.challengeId,
@@ -736,9 +810,9 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
                         } catch (error) {
                           console.error('❌ [TrainingPlanDetailPage] Flow 1: Error calling handleCompleteChallenge:', error);
                         }
-                    }
-                  }}
-                />
+                      }
+                    }}
+                  />
                   );
                 })}
               </div>
