@@ -1,22 +1,25 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { Plus, Dumbbell, Search, Filter, AlertCircle } from "lucide-react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
-import { SimpleInput as Input } from "@/components_1/ui/simple-input";
-import { SimpleModal } from "@/components_1/ui/simple-modal";
-import { SimpleSelect } from "@/components_1/ui/simple-select";
-import { FormField } from "@/components_1/ui/form-field";
-import { SimpleTextarea as Textarea } from "@/components_1/ui/simple-textarea";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
+import { SimpleInput as Input } from "@/components/ui/simple-input";
+import { SimpleModal } from "@/components/ui/simple-modal";
+import { SimpleSelect } from "@/components/ui/simple-select";
+import { FormField } from "@/components/ui/form-field";
+import { SimpleTextarea as Textarea } from "@/components/ui/simple-textarea";
 import { challengeAPI } from "../api/adminAPI";
 import { AdminChallenge, ChallengePayload } from "../types/admin-entities";
 import { ChallengeDetailsPage } from "./ChallengeDetailsPage";
+import { extractDataFromResponse, isResponseSuccess, getErrorMessage } from "../utils/responseHelper";
 
 const DEFAULT_FORM: ChallengePayload = {
   title: "",
   description: "",
   linkVideos: "",
   status: "draft",
-  difficult: "",
+  difficult: "EASY",
   videoFile: null,
+  goalId: undefined,
+  exerciseType: undefined,
 };
 
 type ModalMode = "create" | "edit";
@@ -59,13 +62,30 @@ export function ChallengesPage() {
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [deleteModal, setDeleteModal] = useState<AdminChallenge | null>(null);
   const [detailChallenge, setDetailChallenge] = useState<AdminChallenge | null>(null);
+  const [availableExercises, setAvailableExercises] = useState<string[]>([]);
+  const [loadingExercises, setLoadingExercises] = useState(false);
 
   // Debounced search
   const debouncedSearch = useDebounce(searchTerm, 300);
 
   useEffect(() => {
     fetchChallenges();
+    fetchAvailableExercises();
   }, []);
+
+  const fetchAvailableExercises = async () => {
+    try {
+      setLoadingExercises(true);
+      const exercises = await challengeAPI.getAvailableExercises();
+      setAvailableExercises(exercises);
+    } catch (error) {
+      console.error("Error fetching exercises:", error);
+      // Set default exercises if API fails
+      setAvailableExercises(["push-up", "squat", "pull-up", "sit-up", "plank"]);
+    } finally {
+      setLoadingExercises(false);
+    }
+  };
 
   // Cleanup video preview URL
   useEffect(() => {
@@ -81,18 +101,20 @@ export function ChallengesPage() {
       setLoading(true);
       setError(null);
       const response = await challengeAPI.getAll();
-      const data: AdminChallenge[] = response.data.data || [];
+      
+      // Extract data using helper function
+      const data = extractDataFromResponse<AdminChallenge>(response);
       
       const normalized = data.map((c) => ({
         ...c,
         status: c.status || "draft",
-        difficult: c.difficult || "beginner",
+        difficult: c.difficult || "EASY",
       }));
       
       setChallenges(normalized);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error fetching challenges:", err);
-      setError("Không thể tải danh sách challenges. Vui lòng thử lại.");
+      setError(err?.response?.data?.message || err?.message || "Không thể tải danh sách challenges. Vui lòng thử lại.");
     } finally {
       setLoading(false);
     }
@@ -164,32 +186,70 @@ export function ChallengesPage() {
   };
 
   const handleSubmit = async () => {
-    if (!validateForm()) console.log("File eerror " );
+    if (!validateForm()) {
+      return;
+    }
 
     try {
       setSubmitLoading(true);
       setError(null);
       
-      // ✅ Pass object to API - API will create FormData
-      const payload = {
+      // Create FormData with "data" (JSON string) and "video" (file)
+      const formData = new FormData();
+      
+      // Create data object matching ChallengeDTOPayload
+      const dataPayload = {
+        goalId: form.goalId || null, // Add goalId if available
         title: form.title.trim(),
         description: form.description.trim(),
-        status: form.status,
-        difficult: form.difficult,
-        videoFile: form.videoFile,
+        difficult: form.difficult.toUpperCase(), // BE expects EASY, MEDIUM, HARD
+        linkVideos: form.linkVideos || "", // Keep existing linkVideos if no new file
+        status: form.status.toUpperCase(), // BE expects ACTIVE, INACTIVE, DRAFT, COMPLETED
+        exerciseType: form.exerciseType || null, // AI model/exercise type
       };
+      
+      // Add data as JSON string
+      formData.append("data", JSON.stringify(dataPayload));
+      
+      // Add video file if exists
+      if (form.videoFile) {
+        formData.append("video", form.videoFile);
+      }
 
       console.log("📤 Submitting challenge...");
       console.log("Mode:", modalState.mode);
-      console.log("Payload:", payload);
+      console.log("Data payload:", dataPayload);
       console.log("Has video:", !!form.videoFile);
       
+      let response;
       if (modalState.mode === "create") {
-        await challengeAPI.create(payload);
+        response = await challengeAPI.create(formData);
+        console.log("📥 Create response:", response);
       } else if (modalState.challenge) {
-        await challengeAPI.update(modalState.challenge.id, payload);
+        response = await challengeAPI.update(modalState.challenge.id, formData);
+        console.log("📥 Update response:", response);
+      } else {
+        throw new Error("Invalid modal state");
       }
 
+      // Check if response is successful
+      const isSuccess = isResponseSuccess(response);
+      console.log("🔍 Response success check:", isSuccess, "Response data:", response?.data);
+      
+      if (!isSuccess) {
+        const errorMsg = getErrorMessage(response, "Không thể lưu challenge. Vui lòng thử lại.");
+        console.error("❌ API returned unsuccessful response:", {
+          response,
+          responseData: response?.data,
+          success: response?.data?.success,
+          message: response?.data?.message
+        });
+        setError(errorMsg);
+        return; // Don't reload or close modal if save failed
+      }
+
+      console.log("✅ Challenge saved successfully, reloading data...");
+      // Only reload and close modal if save was successful
       await fetchChallenges();
       closeModal();
     } catch (err: any) {
@@ -206,12 +266,26 @@ export function ChallengesPage() {
   const handleDelete = async (id: number) => {
     try {
       setError(null);
-      await challengeAPI.delete(id);
+      const response = await challengeAPI.delete(id);
+      
+      // Check if response is successful
+      if (!isResponseSuccess(response)) {
+        const errorMsg = getErrorMessage(response, "Không thể xóa challenge. Vui lòng thử lại.");
+        console.error("❌ API returned unsuccessful response:", response);
+        setError(errorMsg);
+        return; // Don't reload or close modal if delete failed
+      }
+
+      console.log("✅ Challenge deleted successfully");
+      // Only reload and close modal if delete was successful
       await fetchChallenges();
       setDeleteModal(null);
-    } catch (err) {
-      console.error("Error deleting challenge:", err);
-      setError("Không thể xóa challenge. Vui lòng thử lại.");
+    } catch (err: any) {
+      console.error("❌ Error deleting challenge:", err);
+      const errorMsg = err?.response?.data?.message 
+        || err?.message 
+        || "Không thể xóa challenge. Vui lòng thử lại.";
+      setError(errorMsg);
     }
   };
 
@@ -273,7 +347,7 @@ export function ChallengesPage() {
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
           <AlertCircle className="text-red-600 flex-shrink-0 mt-0.5" size={20} />
-          <div className="flex-1">
+          <div className="flex">
             <p className="text-sm font-medium text-red-800">{error}</p>
           </div>
           <button
@@ -319,7 +393,7 @@ export function ChallengesPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols gap-4 md:grid-cols-2 xl:grid-cols-3">
           <StatCard
             label="Tổng số challenge"
             value={challengeStats.total}
@@ -339,9 +413,9 @@ export function ChallengesPage() {
 
         {/* Filters */}
         <div className="flex flex-col gap-4 lg:flex-row">
-          <div className="flex-1 relative">
+          <div className="flex relative">
             <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              className="absolute left-3 top/2 -translate-y/2 text-gray-400"
               size={18}
             />
             <Input
@@ -441,13 +515,13 @@ export function ChallengesPage() {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="px-2 py-1 bg-gray-100 rounded text-xs font-medium text-gray-700 capitalize">
+                      <span className="px-2 py bg-gray-100 rounded text-xs font-medium text-gray-700 capitalize">
                         {challenge.difficult}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${statusColor(
+                        className={`px-3 py rounded-full text-xs font-semibold capitalize ${statusColor(
                           challenge.status
                         )}`}
                       >
@@ -575,7 +649,7 @@ export function ChallengesPage() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols md:grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <label className="text-sm font-medium text-gray-700">
                   Trạng thái
@@ -616,6 +690,36 @@ export function ChallengesPage() {
                   ]}
                 />
               </div>
+            </div>
+
+            {/* AI Model Selection */}
+            <div className="grid gap-2">
+              <label className="text-sm font-medium text-gray-700">
+                AI Model / Loại bài tập
+              </label>
+              {loadingExercises ? (
+                <div className="text-sm text-gray-500">Đang tải danh sách...</div>
+              ) : (
+                <SimpleSelect
+                  value={form.exerciseType || ""}
+                  onChange={(value) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      exerciseType: value || undefined,
+                    }))
+                  }
+                  options={[
+                    { value: "", label: "Chọn AI Model (tùy chọn)" },
+                    ...availableExercises.map((exercise) => ({
+                      value: exercise,
+                      label: exercise.charAt(0).toUpperCase() + exercise.slice(1).replace("-", " "),
+                    })),
+                  ]}
+                />
+              )}
+              <p className="text-xs text-gray-500">
+                Chọn AI model để phân tích video submission của người dùng
+              </p>
             </div>
           </div>
         </SimpleModal>
@@ -667,7 +771,7 @@ function StatCard({
     <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm hover:shadow-md transition-shadow">
       <p className="text-sm text-gray-500">{label}</p>
       <p className="text-2xl font-semibold text-gray-900 mt-2">{value}</p>
-      <p className="text-xs text-gray-400 mt-1">{delta}</p>
+      <p className="text-xs text-gray-400 mt">{delta}</p>
     </div>
   );
 }

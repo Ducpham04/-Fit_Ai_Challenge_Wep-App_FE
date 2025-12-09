@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
 import { Settings, Users, Shield, AlertCircle, Trash2, Edit2, Plus, Search, Filter, Copy, Eye, EyeOff, Calendar, LogOut } from "lucide-react";
-import { FormField } from "@/components_1/ui/form-field";
+import { FormField } from "@/components/ui/form-field";
 
 interface AdminAccount {
   id: number;

@@ -1,11 +1,11 @@
 import { useMemo, useState, useEffect } from "react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
 import { Plus, CreditCard, Search, FileDown, AlertCircle, Download, Calendar, Filter } from "lucide-react";
-import { SimpleInput as Input } from "@/components_1/ui/simple-input";
-import { SimpleModal } from "@/components_1/ui/simple-modal";
-import { SimpleSelect } from "@/components_1/ui/simple-select";
-import { FormField } from "@/components_1/ui/form-field";
-import { SimpleTextarea as Textarea } from "@/components_1/ui/simple-textarea";
+import { SimpleInput as Input } from "@/components/ui/simple-input";
+import { SimpleModal } from "@/components/ui/simple-modal";
+import { SimpleSelect } from "@/components/ui/simple-select";
+import { FormField } from "@/components/ui/form-field";
+import { SimpleTextarea as Textarea } from "@/components/ui/simple-textarea";
 import { transactionAPI } from "../api/adminAPI";
 import {
   AdminTransaction,

@@ -7,6 +7,8 @@ interface VideoPlayerProps {
   onVideoError?: (error: string) => void;
   onPlayStateChange?: (isPlaying: boolean) => void;
   className?: string;
+  externalFile?: File | null; // File từ bên ngoài
+  externalVideoSrc?: string | null; // Video source từ bên ngoài
 }
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
@@ -17,6 +19,8 @@ export const VideoPlayer = ({
   onVideoError,
   onPlayStateChange,
   className = '',
+  externalFile = null,
+  externalVideoSrc = null,
 }: VideoPlayerProps) => {
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -177,10 +181,59 @@ export const VideoPlayer = ({
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  // Handle external file or video source
+  useEffect(() => {
+    if (externalFile) {
+      // Validate file type
+      if (!ALLOWED_TYPES.includes(externalFile.type)) {
+        const errorMsg = 'Please upload a valid video file (MP4, WebM, or MOV)';
+        setError(errorMsg);
+        onVideoError?.(errorMsg);
+        return;
+      }
+
+      // Validate file size
+      if (externalFile.size > MAX_FILE_SIZE) {
+        const errorMsg = 'File size must be less than 100MB';
+        setError(errorMsg);
+        onVideoError?.(errorMsg);
+        return;
+      }
+
+      // Revoke previous object URL
+      if (videoSrc) {
+        URL.revokeObjectURL(videoSrc);
+      }
+
+      const url = URL.createObjectURL(externalFile);
+      setVideoSrc(url);
+      setIsPlaying(false);
+      setCurrentTime(0);
+      setError(null);
+    } else if (externalVideoSrc) {
+      // Revoke previous object URL
+      if (videoSrc && videoSrc.startsWith('blob:')) {
+        URL.revokeObjectURL(videoSrc);
+      }
+      setVideoSrc(externalVideoSrc);
+      setIsPlaying(false);
+      setCurrentTime(0);
+      setError(null);
+    } else if (!externalFile && !externalVideoSrc && videoSrc) {
+      // Clear video if external source is removed
+      if (videoSrc.startsWith('blob:')) {
+        URL.revokeObjectURL(videoSrc);
+      }
+      setVideoSrc(null);
+      setIsPlaying(false);
+      setCurrentTime(0);
+    }
+  }, [externalFile, externalVideoSrc, onVideoError]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (videoSrc) {
+      if (videoSrc && videoSrc.startsWith('blob:')) {
         URL.revokeObjectURL(videoSrc);
       }
     };

@@ -1,4 +1,5 @@
 import React from "react";
+import { cn } from "./utils";
 
 interface SimpleButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "default" | "primary" | "danger" | "outline" | "ghost";
@@ -30,7 +31,12 @@ export function SimpleButton({
 
   return (
     <button
-      className={`rounded-lg font-medium transition ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
+      className={cn(
+        "rounded-lg font-medium transition",
+        variantStyles[variant],
+        sizeStyles[size],
+        className
+      )}
       {...props}
     />
   );

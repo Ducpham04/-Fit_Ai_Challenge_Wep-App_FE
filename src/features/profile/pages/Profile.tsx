@@ -1,41 +1,100 @@
-import { motion } from 'motion/react';
-import { Trophy, Zap, Target, TrendingUp, Settings } from 'lucide-react';
-import { mockUserProfile } from '../../../api/mockData';
-import { Link } from 'react-router-dom';
-import { useAuth } from '../../../context/AuthContext';
+import { useEffect, useState } from "react";
+import { motion } from "motion/react";
+import { Trophy, Zap, Target, TrendingUp, Settings, Scale } from "lucide-react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "../../../context/AuthContext";
+import { getUserFullProfile } from "../api/profileService";
+import { ProfileDTO } from "../userProfile.type";
+import { UserInfoAPI, UserInfoDTO } from "../../../api/userInfo.api";
+import { Button } from "../../../components/ui/button";
 
 export const Profile = () => {
   const { user: authUser } = useAuth();
-  
-  // Nếu không có user từ auth, dùng mock data
-  const user = authUser ? {
-    ...mockUserProfile,
-    email: authUser.email,
-    username: authUser.fullName || authUser.email,
-    avatar: authUser.avatar || mockUserProfile.avatar,
-  } : mockUserProfile;
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [profile, setProfile] = useState<ProfileDTO | null>(null);
+  const [userInfo, setUserInfo] = useState<UserInfoDTO | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Load API - reload when location changes (user navigates back from body-record)
+  useEffect(() => {
+    if (!authUser?.id) return;
+
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        console.log("📤 [Profile] Loading profile data...");
+        const [profileData, userInfoResponse] = await Promise.all([
+          getUserFullProfile(authUser.id),
+          UserInfoAPI.getUserInfo().catch((err) => {
+            console.log("⚠️ [Profile] No user info found or error:", err);
+            return null;
+          })
+        ]);
+        setProfile(profileData);
+        
+        // Axios wraps response in data, so extract from response.data.data
+        const userInfoData = userInfoResponse?.data?.data ?? userInfoResponse?.data;
+        if (userInfoData) {
+          console.log("✅ [Profile] User info loaded:", userInfoData);
+          setUserInfo(userInfoData);
+        } else {
+          console.log("ℹ️ [Profile] No user info data available");
+          setUserInfo(null); // Reset nếu không có data
+        }
+      } catch (err) {
+        console.error("❌ [Profile] Failed to load profile", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [authUser, location.key]); // Reload when location changes (user navigates back)
+
+  // Loading skeleton
+  if (loading) {
+    return (
+      <div className="h-screen flex justify-center items-center">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}
+          className="w-12 h-12 border-4 border-sky-500 border-t-transparent rounded-full"
+        />
+      </div>
+    );
+  }
+
+  if (!profile) return <p className="text-center mt-10">No profile data</p>;
+
+  const { profile: user, stats, activity, goals } = profile;
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Profile Header */}
+
+        {/* HEADER */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-white rounded-xl shadow-md overflow-hidden mb-8"
         >
-          <div className="h-32 bg-gradient-to-r from-sky-400 to-lime-400"></div>
+          <div className="h-32 bg-gradient-to-r from-sky-400 to-lime-400" />
+
           <div className="px-8 pb-8">
-            <div className="flex flex-col md:flex-row items-center md:items-end gap-6 -mt-16">
+            <div className="flex flex-col md:flex-row items-center gap-6 -mt-16">
+
               <img
-                src={user.avatar}
+                src={"http://localhost:8080/" + user.avatar}
                 alt={user.username}
                 className="w-32 h-32 rounded-full border-4 border-white shadow-lg"
               />
+
               <div className="flex-1 text-center md:text-left">
-                <h1 className="text-3xl text-gray-900 mb-1">{user.username}</h1>
+                <h1 className="text-3xl text-gray-900">{user.username}</h1>
                 <p className="text-gray-600 mb-3">{user.email}</p>
-                <div className="flex flex-wrap gap-3 justify-center md:justify-start">
+
+                <div className="flex gap-3 justify-center md:justify-start">
                   <span className="px-3 py-1 bg-sky-100 text-sky-700 rounded-full text-sm">
                     Member since {new Date(user.joinDate).toLocaleDateString()}
                   </span>
@@ -44,184 +103,316 @@ export const Profile = () => {
                   </span>
                 </div>
               </div>
+
               <Link
                 to="/settings"
-                className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 <Settings className="w-5 h-5" />
                 Settings
               </Link>
+
             </div>
           </div>
         </motion.div>
 
+        {/* CONTENT */}
         <div className="grid lg:grid-cols-3 gap-8">
-          {/* Stats Cards */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.1 }}
-            className="lg:col-span-2 space-y-6"
-          >
-            {/* Main Stats */}
+          {/* LEFT 2/3 */}
+          <div className="lg:col-span-2 space-y-6">
+
+            {/* Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-white rounded-xl shadow-md p-6 text-center">
-                <div className="inline-block p-3 bg-gradient-to-br from-sky-400 to-sky-500 rounded-lg mb-3">
-                  <TrendingUp className="w-6 h-6 text-white" />
-                </div>
-                <p className="text-2xl text-gray-900 mb-1">{user.aiScore}</p>
-                <p className="text-sm text-gray-600">AI Score</p>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-md p-6 text-center">
-                <div className="inline-block p-3 bg-gradient-to-br from-lime-400 to-lime-500 rounded-lg mb-3">
-                  <Trophy className="w-6 h-6 text-white" />
-                </div>
-                <p className="text-2xl text-gray-900 mb-1">{user.challengesCompleted}</p>
-                <p className="text-sm text-gray-600">Challenges</p>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-md p-6 text-center">
-                <div className="inline-block p-3 bg-gradient-to-br from-orange-400 to-orange-500 rounded-lg mb-3">
-                  <Zap className="w-6 h-6 text-white" />
-                </div>
-                <p className="text-2xl text-gray-900 mb-1">{user.totalWorkouts}</p>
-                <p className="text-sm text-gray-600">Workouts</p>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-md p-6 text-center">
-                <div className="inline-block p-3 bg-gradient-to-br from-purple-400 to-purple-500 rounded-lg mb-3">
-                  <Target className="w-6 h-6 text-white" />
-                </div>
-                <p className="text-2xl text-gray-900 mb-1">{user.currentStreak}</p>
-                <p className="text-sm text-gray-600">Day Streak</p>
-              </div>
+              <StatCard icon={<TrendingUp />} value={stats.aiScore} label="AI Score" color="sky" />
+              <StatCard icon={<Trophy />} value={stats.challengesCompleted} label="Challenges" color="lime" />
+              <StatCard icon={<Zap />} value={stats.totalWorkouts} label="Workouts" color="orange" />
+              <StatCard icon={<Target />} value={stats.currentStreak} label="Day Streak" color="purple" />
             </div>
 
-            {/* Activity Stats */}
+            {/* Activity */}
             <div className="bg-white rounded-xl shadow-md p-6">
               <h2 className="text-2xl text-gray-900 mb-6">Activity Summary</h2>
+
               <div className="grid md:grid-cols-3 gap-6">
-                <div className="text-center p-4 bg-orange-50 rounded-lg">
-                  <p className="text-3xl text-orange-500 mb-2">
-                    {user.stats.totalCaloriesBurned.toLocaleString()}
-                  </p>
-                  <p className="text-gray-700">Calories Burned</p>
-                </div>
-                <div className="text-center p-4 bg-sky-50 rounded-lg">
-                  <p className="text-3xl text-sky-500 mb-2">
-                    {user.stats.totalMinutes.toLocaleString()}
-                  </p>
-                  <p className="text-gray-700">Active Minutes</p>
-                </div>
-                <div className="text-center p-4 bg-lime-50 rounded-lg">
-                  <p className="text-3xl text-lime-500 mb-2">
-                    {user.stats.favoriteWorkout}
-                  </p>
-                  <p className="text-gray-700">Favorite Type</p>
-                </div>
+                <ActivityBox value={activity.totalCaloriesBurned} label="Calories Burned" />
+                <ActivityBox value={activity.totalMinutes} label="Minutes Active" />
+                <ActivityBox value={activity.favoriteWorkout} label="Favorite Workout" />
               </div>
             </div>
+          </div>
 
-            {/* Achievements */}
+          {/* RIGHT COLUMN */}
+          <div className="space-y-6">
+            {/* Body Information */}
             <div className="bg-white rounded-xl shadow-md p-6">
-              <h2 className="text-2xl text-gray-900 mb-6">Recent Achievements</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                  { name: '30 Day Streak', icon: '🔥', color: 'from-orange-400 to-red-400' },
-                  { name: 'First 5K', icon: '🏃', color: 'from-sky-400 to-blue-400' },
-                  { name: '100 Workouts', icon: '💪', color: 'from-purple-400 to-pink-400' },
-                  { name: 'AI Master', icon: '🤖', color: 'from-lime-400 to-green-400' },
-                ].map((achievement, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.2 + index * 0.1 }}
-                    className={`p-4 rounded-xl bg-gradient-to-br ${achievement.color} text-white text-center`}
-                  >
-                    <div className="text-4xl mb-2">{achievement.icon}</div>
-                    <p className="text-sm">{achievement.name}</p>
-                  </motion.div>
-                ))}
+              <div className="flex items-center gap-2 mb-4">
+                <Scale className="w-6 h-6 text-sky-500" />
+                <h2 className="text-xl text-gray-900">Body Information</h2>
               </div>
-            </div>
-          </motion.div>
 
-          {/* Goals Sidebar */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 }}
-            className="space-y-6"
-          >
+              {userInfo ? (
+                <>
+                  <div className="space-y-3 mb-4">
+                    <InfoRow label="Height" value={`${userInfo.heightCm || 0} cm`} />
+                    <InfoRow label="Weight" value={`${userInfo.weightKg || 0} kg`} />
+                    <InfoRow label="Age" value={`${userInfo.age || 0} years`} />
+                    <InfoRow label="Gender" value={userInfo.gender || "N/A"} />
+                    {userInfo.bmi && (
+                      <InfoRow label="BMI" value={userInfo.bmi.toFixed(2)} />
+                    )}
+                    {userInfo.bmr && (
+                      <InfoRow label="BMR" value={`${userInfo.bmr.toFixed(0)} kcal/day`} />
+                    )}
+                    {userInfo.recommendedCalories && (
+                      <InfoRow 
+                        label="Recommended Calories" 
+                        value={`${userInfo.recommendedCalories.toFixed(0)} kcal/day`} 
+                      />
+                    )}
+                    {userInfo.bodyFatPct && (
+                      <InfoRow label="Body Fat" value={`${userInfo.bodyFatPct.toFixed(1)}%`} />
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => navigate("/profile/body-profile")}
+                      className="flex-1"
+                      variant="default"
+                    >
+                      Body Profile
+                    </Button>
+                    <Button
+                      onClick={() => navigate("/profile/body-record")}
+                      className="flex-1"
+                      variant="outline"
+                    >
+                      Update Metrics
+                    </Button>
+                    <Button
+                      onClick={() => navigate("/profile/body-progress")}
+                      className="flex-1"
+                      variant="outline"
+                    >
+                      <TrendingUp className="w-4 h-4 mr-2" />
+                      Progress
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-gray-500 mb-4">Chưa có thông tin body</p>
+                  <div className="space-y-2">
+                    <Button
+                      onClick={() => navigate("/profile/body-profile")}
+                      className="w-full"
+                      variant="default"
+                    >
+                      Complete Body Profile
+                    </Button>
+                    <Button
+                      onClick={() => navigate("/profile/body-record")}
+                      className="w-full"
+                      variant="outline"
+                    >
+                      Update Metrics
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Goals */}
             <div className="bg-white rounded-xl shadow-md p-6">
-              <div className="flex items-center gap-2 mb-6">
+              <div className="flex items-center gap-2 mb-4">
                 <Target className="w-6 h-6 text-sky-500" />
-                <h2 className="text-2xl text-gray-900">My Goals</h2>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-700">Weekly Workouts</span>
-                    <span className="text-sky-500">{user.goals.weeklyWorkouts}</span>
-                  </div>
-                  <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-sky-500 rounded-full" style={{ width: '80%' }}></div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">4 / 5 completed</p>
-                </div>
-
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-700">Daily Calories</span>
-                    <span className="text-orange-500">{user.goals.dailyCalories} kcal</span>
-                  </div>
-                  <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-orange-500 rounded-full" style={{ width: '90%' }}></div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">450 / 500 kcal</p>
-                </div>
-
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-700">Monthly Distance</span>
-                    <span className="text-lime-500">{user.goals.monthlyDistance} km</span>
-                  </div>
-                  <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-lime-500 rounded-full" style={{ width: '60%' }}></div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">30 / 50 km</p>
-                </div>
+                <h2 className="text-xl text-gray-900">My Goals</h2>
               </div>
 
-              <button className="w-full mt-6 py-2 border-2 border-sky-500 text-sky-500 rounded-lg hover:bg-sky-50 transition-colors">
-                Edit Goals
-              </button>
+              {goals && (goals.weeklyWorkouts !== null || goals.dailyCalories !== null || goals.goalName) ? (
+                <>
+                  {/* Show primary goal name */}
+                  {goals.goalName && (
+                    <div className="mb-4 p-3 bg-gradient-to-r from-sky-50 to-lime-50 rounded-lg border border-sky-200">
+                      <p className="text-xs text-gray-600 mb-1">Primary Goal</p>
+                      <p className="text-sm font-semibold text-sky-700">{goals.goalName}</p>
+                    </div>
+                  )}
+
+                  {/* Weekly Workouts */}
+                  {goals.weeklyWorkouts !== null && goals.weeklyWorkouts !== undefined && (
+                    <GoalItem 
+                      label="Weekly Workouts" 
+                      value={goals.weeklyWorkouts} 
+                      target={goals.weeklyWorkoutsTarget || 5}
+                      unit=""
+                    />
+                  )}
+
+                  {/* Daily Calories */}
+                  {goals.dailyCalories !== null && goals.dailyCalories !== undefined && goals.dailyCalories > 0 && (
+                    <GoalItem 
+                      label="Daily Calories Target" 
+                      value={`${goals.dailyCalories} kcal`}
+                      target={goals.dailyCalories}
+                      unit="kcal"
+                    />
+                  )}
+
+                  {/* Monthly Distance */}
+                  {goals.monthlyDistance !== null && goals.monthlyDistance !== undefined && goals.monthlyDistance > 0 && (
+                    <GoalItem 
+                      label="Monthly Distance" 
+                      value={`${goals.monthlyDistance} km`}
+                      target={goals.monthlyDistance}
+                      unit="km"
+                    />
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-6">
+                  <Target className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 mb-4">No goals set yet</p>
+                  <p className="text-sm text-gray-400 mb-4">
+                    Complete your body profile to get personalized goals
+                  </p>
+                  <button
+                    onClick={() => navigate("/profile/body-profile")}
+                    className="w-full py-2 bg-gradient-to-r from-sky-400 to-lime-400 text-white rounded-lg hover:shadow-lg transition-shadow"
+                  >
+                    Set Up Goals
+                  </button>
+                </div>
+              )}
+
+              {goals && (goals.weeklyWorkouts || goals.dailyCalories) && (
+                <button 
+                  onClick={() => navigate("/profile/body-profile")}
+                  className="w-full mt-6 py-2 border-2 border-sky-500 text-sky-500 rounded-lg hover:bg-sky-50 transition-colors"
+                >
+                  Edit Goals
+                </button>
+              )}
             </div>
+          </div>
 
-            {/* Quick Stats */}
-            <div className="bg-gradient-to-br from-sky-50 to-lime-50 rounded-xl p-6">
-              <h3 className="text-xl text-gray-900 mb-4">This Week</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-700">Workouts</span>
-                  <span className="text-gray-900">6</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-700">Calories</span>
-                  <span className="text-gray-900">2,450 kcal</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-700">Minutes</span>
-                  <span className="text-gray-900">380 min</span>
-                </div>
-              </div>
-            </div>
-          </motion.div>
         </div>
       </div>
     </div>
   );
 };
+
+// TYPES
+type ColorKey = "sky" | "lime" | "orange" | "purple";
+
+interface StatCardProps {
+  icon: React.ReactNode;
+  value: number | string;
+  label: string;
+  color: ColorKey;
+}
+
+interface ActivityBoxProps {
+  value: number | string;
+  label: string;
+}
+
+interface GoalItemProps {
+  label: string;
+  value: string | number;
+  target?: number;
+  unit?: string;
+}
+
+// COMPONENTS
+const StatCard = ({ icon, value, label, color }: StatCardProps) => {
+  const bgColors: Record<ColorKey, string> = {
+    sky: "from-sky-400 to-sky-500",
+    lime: "from-lime-400 to-lime-500",
+    orange: "from-orange-400 to-orange-500",
+    purple: "from-purple-400 to-purple-500",
+  };
+
+  const bg = bgColors[color];
+  return (
+    <div className="bg-white rounded-xl shadow-md p-6 text-center">
+      <div className={`inline-block p-3 bg-gradient-to-br ${bg} rounded-lg mb-3 text-white`}>
+        {icon}
+      </div>
+      <p className="text-2xl text-gray-900 mb-1">{value}</p>
+      <p className="text-sm text-gray-600">{label}</p>
+    </div>
+  );
+};
+
+const ActivityBox = ({ value, label }: ActivityBoxProps) => (
+  <div className="text-center p-4 bg-sky-50 rounded-lg">
+    <p className="text-3xl text-sky-500 mb-2">{value}</p>
+    <p className="text-gray-700">{label}</p>
+  </div>
+);
+
+const GoalItem = ({ label, value, target, unit }: GoalItemProps) => {
+  // Extract number from value if it's a string like "2000 kcal"
+  const numericValue = typeof value === 'string' 
+    ? parseFloat(value.replace(/[^\d.]/g, '')) || 0
+    : (value as number) || 0;
+  
+  // Calculate percentage (use target if provided, otherwise use value as 100%)
+  const percentage = target && target > 0
+    ? Math.min((numericValue / target) * 100, 100)
+    : 0;
+
+  const displayUnit = unit || (typeof value === 'string' && value.includes('kcal') ? 'kcal' : typeof value === 'string' && value.includes('km') ? 'km' : '');
+
+  return (
+    <div className="mb-4">
+      <div className="flex justify-between items-center mb-2">
+        <span className="text-gray-700 font-medium">{label}</span>
+        <div className="text-right">
+          <span className="text-sky-600 font-semibold">{numericValue}</span>
+          {target && target > 0 && (
+            <span className="text-gray-500 text-sm ml-1">/ {target}</span>
+          )}
+          {displayUnit && (
+            <span className="text-gray-500 text-sm ml-1">{displayUnit}</span>
+          )}
+        </div>
+      </div>
+      {target && target > 0 ? (
+        <>
+          <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden relative">
+            <div
+              className="h-full bg-gradient-to-r from-sky-400 to-sky-600 rounded-full transition-all duration-500 ease-out"
+              style={{ 
+                width: `${Math.max(0, Math.min(100, percentage))}%`,
+                minWidth: percentage > 0 ? '2px' : '0px'
+              }}
+            />
+          </div>
+          <p className="text-xs text-gray-500 mt-1 text-right">
+            {percentage.toFixed(0)}% complete
+          </p>
+        </>
+      ) : (
+        <div className="w-full h-2 bg-gray-200 rounded-full">
+          <div
+            className="h-full bg-gradient-to-r from-sky-400 to-sky-600 rounded-full"
+            style={{ width: '100%' }}
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
+interface InfoRowProps {
+  label: string;
+  value: string;
+}
+
+const InfoRow = ({ label, value }: InfoRowProps) => (
+  <div className="flex justify-between items-center py-2 border-b border-gray-100 last:border-0">
+    <span className="text-gray-600">{label}</span>
+    <span className="text-gray-900 font-medium">{value}</span>
+  </div>
+);

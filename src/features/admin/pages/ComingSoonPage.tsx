@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AlertCircle } from "lucide-react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
-import { SimpleModal } from "@/components_1/ui/simple-modal";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
+import { SimpleModal } from "@/components/ui/simple-modal";
 
 interface ComingSoonPageProps {
   title: string;

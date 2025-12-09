@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
+import { SimpleModal } from "@/components/ui/simple-modal";
 import { Plus, Search, AlertCircle, Edit2, Trash2, Apple, Users } from "lucide-react";
-import { FormField } from "@/components_1/ui/form-field";
+import { FormField } from "@/components/ui/form-field";
 import { NutritionPlanDetailsPage } from "./NutritionPlanDetailsPage";
 import { AdminNutritionPlan as AdminNutritionPlanType } from "../types/admin-entities";
+import { nutritionPlanAPI } from "../api/adminAPI";
+import { extractDataFromResponse } from "../utils/responseHelper";
 
 interface AdminNutritionPlan {
   id: number;
@@ -65,22 +68,8 @@ const MOCK_PLANS: AdminNutritionPlan[] = [
 
 type ModalMode = "create" | "edit";
 
-function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50" onClick={onClose}></div>
-      <div
-        className="bg-white p-8 rounded-xl w-[500px] max-w-[90%] shadow-2xl relative z-10 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
 export function NutritionPlanPage() {
-  const [plans, setPlans] = useState<AdminNutritionPlan[]>(MOCK_PLANS);
+  const [plans, setPlans] = useState<AdminNutritionPlan[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -97,6 +86,30 @@ export function NutritionPlanPage() {
   const [deleteTarget, setDeleteTarget] = useState<AdminNutritionPlan | null>(null);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [detailPlan, setDetailPlan] = useState<AdminNutritionPlan | null>(null);
+
+  useEffect(() => {
+    fetchPlans();
+  }, []);
+
+  const fetchPlans = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      console.log("📤 [NutritionPlanPage] Fetching nutrition plans...");
+      const response = await nutritionPlanAPI.getAll();
+      console.log("✅ [NutritionPlanPage] Full response:", response);
+      
+      // Extract data using helper function
+      const data = extractDataFromResponse<AdminNutritionPlan>(response);
+      console.log("📋 [NutritionPlanPage] Extracted data:", data);
+      setPlans(data);
+    } catch (error: any) {
+      console.error("❌ [NutritionPlanPage] Error fetching nutrition plans:", error);
+      setError(error?.response?.data?.message || error?.message || "Không thể tải danh sách nutrition plans");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const openCreateModal = () => {
     setForm(EMPTY_PLAN);
@@ -130,36 +143,35 @@ export function NutritionPlanPage() {
 
     try {
       setSubmitLoading(true);
+      setError(null);
       console.log("📤 [NutritionPlanPage] Submitting plan...", form);
 
+      // Map form to BE NutritionPlanRequest format
+      const payload = {
+        goalId: (form as any).goalId || null,
+        title: form.name,
+        description: form.description || "",
+        caloriesPerDay: form.targetCalories || form.dailyCalories || 2000,
+        proteinG: (form as any).proteinG || null,
+        carbsG: (form as any).carbsG || null,
+        fatG: (form as any).fatG || null,
+        status: form.status || "draft",
+      };
+
       if (modalState.mode === "create") {
-        const newPlan: AdminNutritionPlan = {
-          id: Math.max(...plans.map(p => p.id), 0) + 1,
-          ...form,
-          usersAssigned: 0,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        setPlans([...plans, newPlan]);
+        console.log("➕ Creating new nutrition plan");
+        await nutritionPlanAPI.create(payload);
       } else if (modalState.plan) {
-        setPlans(
-          plans.map((p) =>
-            p.id === modalState.plan!.id
-              ? {
-                  ...p,
-                  ...form,
-                  updatedAt: new Date().toISOString(),
-                }
-              : p
-          )
-        );
+        console.log("✏️ Updating nutrition plan ID:", modalState.plan.id);
+        await nutritionPlanAPI.update(modalState.plan.id, payload);
       }
 
       console.log("✅ Plan saved successfully");
+      await fetchPlans();
       closeModal();
     } catch (err: any) {
       console.error("❌ [NutritionPlanPage] Submit error:", err);
-      setError(err?.message || "Failed to save plan");
+      setError(err?.response?.data?.message || err?.message || "Failed to save plan");
     } finally {
       setSubmitLoading(false);
     }
@@ -170,12 +182,15 @@ export function NutritionPlanPage() {
 
     try {
       setSubmitLoading(true);
-      setPlans(plans.filter((p) => p.id !== deleteTarget.id));
-      console.log("✅ Plan deleted successfully");
-      closeModal();
+      setError(null);
+      console.log("🗑️ [NutritionPlanPage] Deleting nutrition plan ID:", deleteTarget.id);
+      await nutritionPlanAPI.delete(deleteTarget.id);
+      console.log("✅ Nutrition plan deleted successfully");
+      await fetchPlans();
+      setDeleteTarget(null);
     } catch (err: any) {
       console.error("❌ [NutritionPlanPage] Delete error:", err);
-      setError(err?.message || "Failed to delete plan");
+      setError(err?.response?.data?.message || err?.message || "Failed to delete plan");
     } finally {
       setSubmitLoading(false);
     }
@@ -382,11 +397,22 @@ export function NutritionPlanPage() {
 
       {/* Create/Edit Modal */}
       {!detailPlan && modalState.open && !deleteTarget && (
-        <Modal onClose={closeModal}>
-          <h2 className="text-xl font-bold mb-6">
-            {modalState.mode === "create" ? "Create Nutrition Plan" : "Edit Nutrition Plan"}
-          </h2>
-
+        <SimpleModal
+          isOpen={modalState.open}
+          onClose={closeModal}
+          title={modalState.mode === "create" ? "Create Nutrition Plan" : "Edit Nutrition Plan"}
+          className="max-w-lg max-h-[90vh] overflow-y-auto"
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={closeModal} disabled={submitLoading}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={handleSubmit} disabled={submitLoading}>
+                {submitLoading ? "Saving..." : "Save Plan"}
+              </Button>
+            </div>
+          }
+        >
           <div className="space-y-4">
             <FormField
               label="Plan Name"
@@ -443,38 +469,35 @@ export function NutritionPlanPage() {
               />
             </div>
           </div>
-
-          <div className="mt-6 flex justify-end gap-3">
-            <Button variant="outline" onClick={closeModal} disabled={submitLoading}>
-              Cancel
-            </Button>
-            <Button onClick={handleSubmit} disabled={submitLoading}>
-              {submitLoading ? "Saving..." : "Save Plan"}
-            </Button>
-          </div>
-        </Modal>
+        </SimpleModal>
       )}
 
       {/* Delete Modal */}
       {deleteTarget && (
-        <Modal onClose={closeModal}>
-          <h2 className="text-xl font-bold mb-4 text-red-600">Confirm Delete</h2>
-          <p>
-            Are you sure you want to delete <strong>{deleteTarget.name}</strong>?
-          </p>
-          <p className="text-sm text-gray-600 mt-2">
-            {deleteTarget.usersAssigned} users are currently using this plan.
-          </p>
-
-          <div className="mt-6 flex justify-end gap-3">
-            <Button variant="outline" onClick={closeModal} disabled={submitLoading}>
-              Cancel
-            </Button>
-            <Button onClick={handleDelete} disabled={submitLoading}>
-              {submitLoading ? "Deleting..." : "Delete Plan"}
-            </Button>
+        <SimpleModal
+          isOpen={Boolean(deleteTarget)}
+          onClose={closeModal}
+          title="Confirm Delete"
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={closeModal} disabled={submitLoading}>
+                Cancel
+              </Button>
+              <Button variant="danger" onClick={handleDelete} disabled={submitLoading}>
+                {submitLoading ? "Deleting..." : "Delete Plan"}
+              </Button>
+            </div>
+          }
+        >
+          <div>
+            <p className="text-red-600 font-semibold mb-2">
+              Are you sure you want to delete <strong>{deleteTarget.name}</strong>?
+            </p>
+            <p className="text-sm text-gray-600">
+              {deleteTarget.usersAssigned} users are currently using this plan.
+            </p>
           </div>
-        </Modal>
+        </SimpleModal>
       )}
     </main>
   );

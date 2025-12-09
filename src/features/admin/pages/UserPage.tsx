@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
 import { Users, AlertCircle, Search } from "lucide-react";
 import { AdminUser } from "../types/admin-entities";
 import { UserTable } from "../components/UserTable";
@@ -7,6 +7,7 @@ import { validateUserForm, hasErrors, type UserFormErrors } from "@/utils/formVa
 import { userApi } from "../api/user";
 import { UserDetailPage } from "./UserDetailPage";
 import { userAPI } from "../api/adminAPI";
+import { extractDataFromResponse } from "../utils/responseHelper";
 
 /* REQUEST MODEL MỚI — thêm password + roleId */
 const EMPTY_FORM = { 
@@ -34,10 +35,10 @@ type ModalType = "create" | "edit" | "delete" | null;
 /* Modal Overlay */
 function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50" onClick={onClose}></div>
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose}></div>
       <div
-        className="bg-white p-8 rounded-xl w-[500px] max-w-[90%] shadow-2xl relative z-10"
+        className="relative z-[100000] bg-white p-8 rounded-xl w-[500px] max-w-full shadow-2xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {children}
@@ -72,27 +73,18 @@ export function UserPage() {
       setError(null);
       console.log("📤 [UserPage] Fetching users...");
       
-      // Try using new adminAPI first
-      try {
-        const response = await userApi.getUsers();
-        console.log("✅ [UserPage] Response:", response);
-        
-        let userData: AdminUser[] = [];
-        if (Array.isArray(response?.data?.data)) {
-          userData = response.data.data;
-        } else if (Array.isArray(response?.data)) {
-          userData = response.data;
-        }
-        console.log("📋 [UserPage] Extracted users:", userData);
-        setUsers(userData);
-      } catch (apiErr: any) {
-        console.error("❌ [UserPage] API error:", apiErr);
-        setError("❌ Không thể tải danh sách người dùng. Vui lòng thử lại.");
-        setUsers([]);
-      }
+      // Use AdminAPI which returns Page<UserDTO> format
+      const response = await userAPI.getAll();
+      console.log("✅ [UserPage] Full response:", response);
+      
+      // Extract data using helper function
+      const userData = extractDataFromResponse<AdminUser>(response);
+      console.log("📋 [UserPage] Extracted users:", userData);
+      setUsers(userData);
     } catch (err: any) {
       console.error("❌ [UserPage] Error:", err);
-      setError(err?.message || "Error loading users");
+      setError(err?.response?.data?.message || err?.message || "Error loading users");
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -237,13 +229,15 @@ export function UserPage() {
             <Button
               onClick={fetchUsers}
               disabled={loading}
-              className="flex items-center gap-2 bg-gray-500 px-4 py-2 hover:bg-gray-600 disabled:opacity-50"
+              variant="outline"
+              className="flex items-center gap-2"
             >
               {loading ? "Loading..." : "Refresh"}
             </Button>
             <Button
               onClick={openCreate}
-              className="flex items-center gap-2 bg-blue-600 px-4 py-2 hover:bg-blue-700"
+              variant="primary"
+              className="flex items-center gap-2"
             >
               + Thêm người dùng
             </Button>
@@ -370,24 +364,29 @@ export function UserPage() {
                   </td>
                   <td className="px-6 py-3 text-sm">
                     <div className="flex gap-2">
-                      <button
+                      <Button
                         onClick={() => openDetail(user)}
-                        className="px-3 py-1 bg-green-500 hover:bg-green-600  rounded text-xs"
+                        variant="outline"
+                        size="sm"
+                        className="text-green-600 hover:bg-green-50"
                       >
                         Detail
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         onClick={() => openEdit(user)}
-                        className="px-3 py-1 bg-blue-500 hover:bg-blue-600 rounded text-xs"
+                        variant="outline"
+                        size="sm"
+                        className="text-blue-600 hover:bg-blue-50"
                       >
                         Edit
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         onClick={() => openDelete(user)}
-                        className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-xs"
+                        variant="danger"
+                        size="sm"
                       >
                         Delete
-                      </button>
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -477,7 +476,7 @@ export function UserPage() {
                 <Button variant="outline" onClick={closeModal} disabled={submitLoading}>
                   Hủy
                 </Button>
-                <Button onClick={handleSubmit} disabled={submitLoading}>
+                <Button variant="primary" onClick={handleSubmit} disabled={submitLoading}>
                   {submitLoading ? "Loading..." : activeModal === "create" ? "Tạo" : "Cập nhật"}
                 </Button>
               </div>
@@ -497,7 +496,7 @@ export function UserPage() {
                 <Button variant="outline" onClick={closeModal} disabled={submitLoading}>
                   Hủy
                 </Button>
-                <Button onClick={handleDelete} disabled={submitLoading}>
+                <Button variant="danger" onClick={handleDelete} disabled={submitLoading}>
                   {submitLoading ? "Loading..." : "Xóa"}
                 </Button>
               </div>

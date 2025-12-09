@@ -1,319 +1,376 @@
-// Simple Admin API Service with detailed console logging
-import client from '../../../api/client'; // ✅ Dùng client có token
-import { tokenService } from '../../../api/token.service';
+import client from "../../../api/client";
+import { getExercises } from "../../../api/fitnessAI.api";
+import {
+  AdminUser,
+  UserPayload,
+  AdminChallenge,
+  ChallengePayload,
+  AdminReward,
+  RewardPayload,
+  AdminMeal,
+  MealPayload,
+  AdminFood,
+  FoodPayload,
+  AdminTrainingPlan,
+  TrainingPlanPayload,
+  AdminNutritionPlan,
+  NutritionPlanPayload,
+  AdminTransaction,
+  AdminGoal,
+  GoalPayload,
+  MealFoodPayload,
+  MealResponse,
+  FoodOption
+} from "../types/admin-entities";
 
-const API_BASE = '/admin';
+export const AdminAPI = {
+  // User Management
+  getUsers: (params?: {
+    status?: "active" | "inactive" | "banned";
+    role?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) => client.get("/admin/users", { params }),
 
-// Mock Data
-const MOCK_USERS = [
-  { id: 1, fullName: "John Doe", email: "john@example.com", role: "Admin", avatar: "https://via.placeholder.com/40", createdAt: new Date().toISOString(), status: "active" },
-  { id: 2, fullName: "Jane Smith", email: "jane@example.com", role: "Premium", avatar: "https://via.placeholder.com/40", createdAt: new Date().toISOString(), status: "pending" },
-];
+  getUserById: (id: number) => client.get(`/admin/users/${id}`),
 
-const MOCK_CHALLENGES = [
-  { id: 1, name: '100 Push-ups', description: 'Complete 100 push-ups', difficulty: 'Hard', reward: 100 },
-  { id: 2, name: '50 Squats', description: 'Complete 50 squats', difficulty: 'Medium', reward: 50 },
-];
+  createUser: (data: UserPayload) => client.post("/admin/users", data),
 
-const MOCK_REWARDS = [
-  { id: 1, name: 'Gold Badge', points: 100, description: 'Achievement for completing challenges' },
-  { id: 2, name: 'Silver Badge', points: 50, description: 'Achievement for participation' },
-];
+  updateUser: (id: number, data: Partial<UserPayload>) => client.put(`/admin/users/${id}`, data),
 
-const MOCK_TRAINING_PLANS = [
-  { id: 1, name: "Beginner Strength", duration: "30 ngày", difficulty: "beginner", subscribers: 245, price: 29, status: "published", focusArea: "Strength & Mobility", updatedAt: new Date().toISOString().slice(0,10) },
-  { id: 2, name: "Advanced Cardio", duration: "45 ngày", difficulty: "advanced", subscribers: 132, price: 39, status: "draft", focusArea: "Endurance", updatedAt: new Date().toISOString().slice(0,10) },
-  { id: 3, name: "HIIT Fat Burn", duration: "21 ngày", difficulty: "intermediate", subscribers: 198, price: 35, status: "published", focusArea: "HIIT", updatedAt: new Date().toISOString().slice(0,10) },
-];
+  deleteUser: (id: number) => client.delete(`/admin/users/${id}`),
 
-const MOCK_MEALS = [
-  { id: 1, name: 'High Protein Breakfast', calories: 450, protein: 30 },
-  { id: 2, name: 'Balanced Lunch', calories: 650, protein: 40 },
-];
+  // Challenge Management
+  getChallenges: (params?: {
+    status?: "draft" | "active" | "inactive" | "completed";
+    page?: number;
+    limit?: number;
+  }) => client.get("/admin/challenges", { params }),
 
-const MOCK_FOODS = [
-  { id: 1, name: 'Chicken Breast', calories: 165, protein: 31 },
-  { id: 2, name: 'Brown Rice', calories: 111, protein: 3 },
-];
+  getChallengeById: (id: number) => client.get(`/admin/challenges/${id}`),
 
-const MOCK_TRANSACTIONS = [
-  { id: 1, userId: "USR-001", userName: "John Doe", amount: 120, type: "deposit", date: new Date().toISOString().slice(0,10), status: "completed", note: "Stripe charge #1234" },
-  { id: 2, userId: "USR-002", userName: "Jane Smith", amount: 45, type: "reward", date: new Date().toISOString().slice(0,10), status: "pending", note: "Weekly challenge reward" },
-  { id: 3, userId: "USR-003", userName: "Alex Nguyen", amount: 59, type: "purchase", date: new Date().toISOString().slice(0,10), status: "failed", note: "Card declined" },
-];
+  createChallenge: (data: FormData) => client.post("/admin/challenges", data, {
+    headers: { "Content-Type": "multipart/form-data" }
+  }),
 
-const MOCK_GOALS = [
-  { id: 1, userId: 1, name: 'Lose 5kg', target: 5, progress: 2, unit: 'kg' },
-  { id: 2, userId: 2, name: 'Run 100km', target: 100, progress: 45, unit: 'km' },
-];
+  updateChallenge: (id: number, data: FormData) => client.put(`/admin/challenges/${id}`, data, {
+    headers: { "Content-Type": "multipart/form-data" }
+  }),
 
-// -------------------------------
-// Wrapper function with console logs - throw error for mutation operations
-async function callAPIWithFallback(apiCall: () => Promise<any>, mockData: any[], apiName = 'API', isMutation = false) {
-  try {
-    console.log(`🌐 [${apiName}] Calling API...`);
-    const response = await apiCall();
-    console.log(`✅ [${apiName}] Raw response:`, response);
-    console.log(`✅ [${apiName}] response.data:`, response?.data);
-    
-    // Return response as-is so pages can handle the structure
-    return response;
-  } catch (error) {
-    console.warn(`⚠️ [${apiName}] Failed - Error:`, error);
-    
-    // For mutations (POST/PUT/DELETE), throw error instead of fallback
-    if (isMutation) {
-      console.error(`❌ [${apiName}] Mutation failed - throwing error`);
-      throw error;
-    }
-    
-    // For read operations (GET), fallback to mock
-    console.warn(`⚠️ [${apiName}] Using mock data as fallback`);
-    return { data: mockData };
-  }
-}
+  deleteChallenge: (id: number) => client.delete(`/admin/challenges/${id}`),
 
-// -------------------------------
-// Users API
-// -------------------------------
-export const userAPI = {
-  getAll: () => callAPIWithFallback(() => client.get('/admin/users'), MOCK_USERS, 'GET /admin/user'),
-  create: (data: any) => callAPIWithFallback(() => client.post('/admin/user', data), MOCK_USERS, 'POST /admin/user'),
-  update: (id: number, data: any) => callAPIWithFallback(() => client.put(`/admin/user/${id}`, data), MOCK_USERS, `PUT /admin/user/${id}`),
-  delete: (id: number) => callAPIWithFallback(() => client.delete(`/admin/user/${id}`), MOCK_USERS, `DELETE /admin/user/${id}`),
-};
+  // Reward Management
+  getRewards: (params?: {
+    status?: "active" | "inactive";
+    page?: number;
+    limit?: number;
+  }) => client.get("/admin/rewards", { params }),
 
-export const infBodyAPI = {
-  getBodyData: (id: number) => callAPIWithFallback(() => client.get(`/admin/information-body/${id}`),MOCK_USERS
+  getRewardById: (id: number) => client.get(`/admin/rewards/${id}`),
 
-)}
-// -------------------------------
-// Challenges API
-// -------------------------------
-export const challengeAPI = {
-  getAll: () =>
-    callAPIWithFallback(
-      () => client.get("/admin/challenges"),
-      MOCK_CHALLENGES,
-      "GET /admin/challenges"
-    ),
+  createReward: (data: FormData) => client.post("/admin/rewards", data, {
+    headers: { "Content-Type": "multipart/form-data" }
+  }),
 
-  create: (payload: any) => {
-    console.log("📤 CREATE Challenge - Payload:", payload);
-    
-    return callAPIWithFallback(
-      () => {
-        const fd = new FormData();
+  updateReward: (id: number, data: FormData) => client.put(`/admin/rewards/${id}`, data, {
+    headers: { "Content-Type": "multipart/form-data" }
+  }),
 
-        // Ensure safe data
-        const safeData = {
-          title: payload.title?.trim() || "",
-          description: payload.description?.trim() || "",
-          status: payload.status || "ACTIVE",
-          difficult: payload.difficult || "BEGINER",
-        };
+  deleteReward: (id: number) => client.delete(`/admin/rewards/${id}`),
 
-        console.log("📦 Safe data:", safeData);
-        fd.append("data", JSON.stringify(safeData));
+  // Meal Management
+  getMeals: (params?: {
+    nutritionPlanId?: number;
+    page?: number;
+    limit?: number;
+  }) => client.get("/admin/meals", { params }),
 
-        // Attach video file if present
-        if (payload.videoFile instanceof File) {
-          console.log("✅ Video file attached:", payload.videoFile.name, `(${payload.videoFile.size} bytes)`);
-          fd.append("video", payload.videoFile);
-        } else if (payload.video instanceof File) {
-          console.log("✅ Video file attached (video key):", payload.video.name);
-          fd.append("video", payload.video);
-        } else {
-          console.log("ℹ️ No video file");
-        }
+  getMealById: (id: number) => client.get(`/admin/meals/${id}`),
 
-        // Debug FormData content
-        console.log("📋 FormData entries:");
-        for (const [key, value] of fd.entries()) {
-          if (value instanceof File) {
-            console.log(`  ${key}: File(${value.name}, ${value.size} bytes)`);
-          } else {
-            console.log(`  ${key}:`, value);
-          }
-        }
+  createMeal: (data: MealPayload) => client.post("/admin/meals", data),
 
-        return client.post(`/admin/challenges`, fd, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-      },
-      MOCK_CHALLENGES,
-      "POST /admin/challenges",
-      true // isMutation = true
-    );
-  },
+  updateMeal: (id: number, data: Partial<MealPayload>) => client.put(`/admin/meals/${id}`, data),
 
-  update: (id: number, payload: any) => {
-    console.log("📤 UPDATE Challenge ID:", id, "Payload:", payload);
-    
-    return callAPIWithFallback(
-      () => {
-        const fd = new FormData();
+  deleteMeal: (id: number) => client.delete(`/admin/meals/${id}`),
 
-        const safeData = {
-          title: payload.title?.trim() || "",
-          description: payload.description?.trim() || "",
-          status: payload.status || "ACTIVE",
-          difficult: payload.difficult || "BEGINER",
-        };
+  // Food Management
+  getFoods: (params?: {
+    page?: number;
+    limit?: number;
+  }) => client.get("/admin/foods", { params }),
 
-        console.log("📦 Safe data:", safeData);
-        fd.append("data", JSON.stringify(safeData));
+  getFoodById: (id: number) => client.get(`/admin/foods/${id}`),
 
-        if (payload.videoFile instanceof File) {
-          console.log("✅ Video file attached:", payload.videoFile.name, `(${payload.videoFile.size} bytes)`);
-          fd.append("video", payload.videoFile);
-        } else if (payload.video instanceof File) {
-          console.log("✅ Video file attached (video key):", payload.video.name);
-          fd.append("video", payload.video);
-        } else {
-          console.log("ℹ️ No video file");
-        }
+  createFood: (data: FoodPayload) => client.post("/admin/foods", data),
 
-        console.log("📋 FormData entries:");
-        for (const [key, value] of fd.entries()) {
-          if (value instanceof File) {
-            console.log(`  ${key}: File(${value.name}, ${value.size} bytes)`);
-          } else {
-            console.log(`  ${key}:`, value);
-          }
-        }
+  updateFood: (id: number, data: Partial<FoodPayload>) => client.put(`/admin/foods/${id}`, data),
 
-        return client.put(`/admin/challenges/${id}`, fd, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-      },
-      MOCK_CHALLENGES,
-      `PUT /admin/challenges/${id}`,
-      true // isMutation = true
-    );
-  },
+  deleteFood: (id: number) => client.delete(`/admin/foods/${id}`),
 
-  delete: (id: number) => {
-    console.log("🗑️ DELETE Challenge ID:", id);
-    return callAPIWithFallback(
-      () => client.delete(`/admin/challenges/${id}`),
-      MOCK_CHALLENGES,
-      `DELETE /admin/challenges/${id}`,
-      true // isMutation = true
-    );
-  },
-};
+  // Training Plan Management
+  getTrainingPlans: (params?: {
+    status?: "published" | "draft" | "archived";
+    page?: number;
+    limit?: number;
+  }) => client.get("/admin/training-plans", { params }),
 
+  getTrainingPlanById: (id: number) => client.get(`/admin/training-plans/${id}`),
 
-// -------------------------------
-// Rewards API
-// -------------------------------
-export const rewardAPI = {
-  create: (form: any) => {
-const fd = new FormData();
+  createTrainingPlan: (data: TrainingPlanPayload) => client.post("/admin/training-plans", data),
 
-// Tạo object chỉ chứa dữ liệu "text/number"
-const payloadData = {
-  name: form.name,
-  description: form.description,
-  points: form.points,
-  claimed: form.claimed,
-  expiresAt: form.expiresAt,
-  status: form.status,
-  linkImage: form.linkImage,
-  total: form.total,
-};
+  updateTrainingPlan: (id: number, data: Partial<TrainingPlanPayload>) => client.put(`/admin/training-plans/${id}`, data),
 
-fd.append("reward", JSON.stringify(payloadData));
-console.log(fd)
-// File vẫn append riêng
-if (form.imageFile instanceof File) {
-  fd.append("file", form.imageFile);
-}
+  deleteTrainingPlan: (id: number) => client.delete(`/admin/training-plans/${id}`),
 
+  // Nutrition Plan Management (Note: BE uses /api/nutrition-plans, not /admin/nutrition-plans)
+  getNutritionPlans: (params?: {
+    status?: "published" | "draft" | "archived";
+    page?: number;
+    limit?: number;
+  }) => client.get("/nutrition-plans", { params }),
 
+  getNutritionPlanById: (id: number) => client.get(`/nutrition-plans/${id}`),
 
-    return callAPIWithFallback(
-      () => client.post("/admin/rewards", form, { headers: { "Content-Type": "multipart/form-data" } }),
-      MOCK_REWARDS,
-      "POST /admin/rewards",
-      true
-    );
-  },
+  createNutritionPlan: (data: NutritionPlanPayload) => client.post("/nutrition-plans", data),
 
-  update: (id: number, payload: any) => {
-    const fd = new FormData();
-    fd.append("reward", JSON.stringify(payload));
-    if (payload.imageFile instanceof File) {
-      fd.append("file", payload.imageFile);
-    }
+  updateNutritionPlan: (id: number, data: Partial<NutritionPlanPayload>) => client.put(`/nutrition-plans/${id}`, data),
 
-    return callAPIWithFallback(
-      () => client.put(`/admin/rewards/${id}`, payload, { headers: { "Content-Type": "multipart/form-data" } }),
-      MOCK_REWARDS,
-      `PUT /admin/rewards/${id}`,
-      true
-    );
-  },
+  deleteNutritionPlan: (id: number) => client.delete(`/nutrition-plans/${id}`),
 
-  getAll: () => callAPIWithFallback(() => client.get("/admin/rewards"), MOCK_REWARDS, "GET /admin/rewards"),
+  // Transaction Management
+  getTransactions: (params?: {
+    userId?: string;
+    type?: "deposit" | "withdrawal" | "reward" | "purchase";
+    status?: "completed" | "pending" | "failed";
+    page?: number;
+    limit?: number;
+  }) => client.get("/transactions", { params }), // Backend uses /api/transactions, not /admin/transactions
 
-  delete: (id: number) => callAPIWithFallback(() => client.delete(`/admin/rewards/${id}`), MOCK_REWARDS, `DELETE /admin/rewards/${id}`)
-};
+  getTransactionById: (id: number) => client.get(`/transactions/${id}`),
 
+  createTransaction: (data: any) => client.post("/admin/transactions", data),
 
+  updateTransaction: (id: number, data: any) => client.put(`/admin/transactions/${id}`, data),
 
-// -------------------------------
-// Training Plans API
-// -------------------------------
-export const trainingPlanAPI = {
-  getAll: () => callAPIWithFallback(() => client.get('/admin/training-plans'), MOCK_TRAINING_PLANS, 'GET /admin/training-plan'),
-  create: (data: any) => callAPIWithFallback(() => client.post('/admin/training-plans', data), MOCK_TRAINING_PLANS, 'POST /admin/training-plan'),
-  update: (id: number, data: any) => callAPIWithFallback(() => client.put(`/admin/training-plans/${id}`, data), MOCK_TRAINING_PLANS, `PUT /admin/training-plan/${id}`),
-  delete: (id: number) => callAPIWithFallback(() => client.delete(`/admin/training-plans/${id}`), MOCK_TRAINING_PLANS, `DELETE /admin/training-plan/${id}`),
-  getById : (id : number) => callAPIWithFallback(() => client.get(`/user/training-details/${id}`),  MOCK_TRAINING_PLANS )  
+  // Goal Management
+  getGoals: (params?: {
+    userId?: string;
+    type?: "weight" | "steps" | "calories" | "workout" | "water" | "sleep" | "custom";
+    status?: "active" | "completed" | "abandoned" | "paused";
+    page?: number;
+    limit?: number;
+  }) => client.get("/admin/goals", { params }),
+
+  getGoalById: (id: number) => client.get(`/admin/goals/${id}`),
+
+  createGoal: (data: FormData) => client.post("/admin/goals", data, {
+    headers: { "Content-Type": "multipart/form-data" }
+  }),
+
+  updateGoal: (id: number, data: FormData) => client.put(`/admin/goals/${id}`, data, {
+    headers: { "Content-Type": "multipart/form-data" }
+  }),
+
+  deleteGoal: (id: number) => client.delete(`/admin/goals/${id}`),
+
+  // Dashboard Statistics
+  getDashboardOverview: () => client.get("/admin/dashboard/overview"),
   
+  getUserStats: (period?: "day" | "week" | "month" | "year" | "all") =>
+    client.get(`/admin/dashboard/user-stats`, { params: { period: period || "all" } }),
+
+  getChallengeStats: (period?: "day" | "week" | "month" | "year" | "all") =>
+    client.get(`/admin/dashboard/challenge-stats`, { params: { period: period || "all" } }),
+
+  getTrainingStats: (period?: "day" | "week" | "month" | "year" | "all") =>
+    client.get(`/admin/dashboard/training-stats`, { params: { period: period || "all" } }),
+
+  getNutritionStats: (period?: "day" | "week" | "month" | "year" | "all") =>
+    client.get(`/admin/dashboard/nutrition-stats`, { params: { period: period || "all" } }),
+
+  getRewardStats: (period?: "day" | "week" | "month" | "year" | "all") =>
+    client.get(`/admin/dashboard/reward-stats`, { params: { period: period || "all" } }),
+
+  // System Settings
+  getSystemSettings: () => client.get("/admin/system/settings"),
+
+  updateSystemSettings: (data: any) => client.put("/admin/system/settings", data),
+
+  // Notifications
+  getNotifications: (params?: {
+    type?: string;
+    status?: "sent" | "pending" | "failed";
+    page?: number;
+    limit?: number;
+  }) => client.get("/admin/notifications", { params }),
+
+  createNotification: (data: any) => client.post("/admin/notifications", data),
+
+  sendNotification: (id: number) => client.post(`/admin/notifications/${id}/send`),
+
+  // AI Logs
+  getAILogs: (params?: {
+    type?: string;
+    userId?: string;
+    page?: number;
+    limit?: number;
+  }) => client.get("/admin/ai-logs", { params }),
+
+  getAILogById: (id: number) => client.get(`/admin/ai-logs/${id}`),
+
+  // Roles Management
+  getRoles: () => client.get("/admin/roles"),
+
+  createRole: (data: any) => client.post("/admin/roles", data),
+
+  updateRole: (id: number, data: any) => client.put(`/admin/roles/${id}`, data),
+
+  deleteRole: (id: number) => client.delete(`/admin/roles/${id}`),
+
+  // Bulk Operations
+  bulkUpdateUsers: (data: { userIds: number[]; updates: Partial<UserPayload> }) =>
+    client.put("/admin/users/bulk", data),
+
+  bulkDeleteUsers: (userIds: number[]) =>
+    client.delete("/admin/users/bulk", { data: { userIds } }),
+
+  bulkUpdateChallenges: (data: { challengeIds: number[]; updates: Partial<ChallengePayload> }) =>
+    client.put("/admin/challenges/bulk", data),
+
+  // Export Data
+  exportUsers: (params?: any) => client.get("/admin/export/users", {
+    params,
+    responseType: "blob"
+  }),
+
+  exportTransactions: (params?: any) => client.get("/admin/export/transactions", {
+    params,
+    responseType: "blob"
+  }),
+
+  // Analytics
+  getAnalytics: (type: string, params?: any) =>
+    client.get(`/admin/analytics/${type}`, { params }),
+
+  getReports: (type: string, params?: any) =>
+    client.get(`/admin/reports/${type}`, { params })
 };
 
-// -------------------------------
-// Meals API
-// -------------------------------
-export const mealAPI = {
-  getAll: () => callAPIWithFallback(() => client.get('/admin/meals'), MOCK_MEALS, 'GET /admin/meal'),
-  create: (data: any) => callAPIWithFallback(() => client.post('/admin/meals', data), MOCK_MEALS, 'POST /admin/meal'),
-  update: (id: number, data: any) => callAPIWithFallback(() => client.put(`/admin/meals/${id}`, data), MOCK_MEALS, `PUT /admin/meal/${id}`),
-  delete: (id: number) => callAPIWithFallback(() => client.delete(`/admin/meals/${id}`), MOCK_MEALS, `DELETE /admin/meal/${id}`),
+// Body Information API
+export const infBodyAPI = {
+  getBodyData: (userId: number) => client.get(`/admin/users/${userId}/body-data`),
+  createBodyData: (userId: number, data: any) => client.post(`/admin/users/${userId}/body-data`, data),
+  updateBodyData: (userId: number, bodyDataId: number, data: any) => client.put(`/admin/users/${userId}/body-data/${bodyDataId}`, data),
+  deleteBodyData: (userId: number, bodyDataId: number) => client.delete(`/admin/users/${userId}/body-data/${bodyDataId}`)
 };
 
-// -------------------------------
-// Foods API
-// -------------------------------
-export const foodAPI = {
-  getAll: () => callAPIWithFallback(() => client.get('/foods'), MOCK_FOODS, 'GET /admin/food'),
-  create: (data: any) => callAPIWithFallback(() => client.post('/admin/foods', data), MOCK_FOODS, 'POST /admin/food'),
-  update: (id: number, data: any) => callAPIWithFallback(() => client.put(`/admin/foods/${id}`, data), MOCK_FOODS, `PUT /admin/food/${id}`),
-  delete: (id: number) => callAPIWithFallback(() => client.delete(`/admin/foods/${id}`), MOCK_FOODS, `DELETE /admin/food/${id}`),
+// User API for User Management
+export const userAPI = {
+  getAll: AdminAPI.getUsers,
+  getUsers: AdminAPI.getUsers,
+  getUserById: AdminAPI.getUserById,
+  create: AdminAPI.createUser,
+  update: AdminAPI.updateUser,
+  deleteUser: AdminAPI.deleteUser,
+  bulkUpdateUsers: AdminAPI.bulkUpdateUsers,
+  bulkDeleteUsers: AdminAPI.bulkDeleteUsers
 };
 
-// -------------------------------
-// Transactions API
-// -------------------------------
+// Challenge API for Challenge Management
+export const challengeAPI = {
+  getAll: AdminAPI.getChallenges,
+  getChallenges: AdminAPI.getChallenges,
+  getChallengeById: AdminAPI.getChallengeById,
+  create: AdminAPI.createChallenge,
+  update: AdminAPI.updateChallenge,
+  delete: AdminAPI.deleteChallenge,
+  bulkUpdate: AdminAPI.bulkUpdateChallenges,
+  // Get available AI models/exercises from Fitness AI Service
+  getAvailableExercises: async (): Promise<string[]> => {
+    try {
+      return await getExercises();
+    } catch (error) {
+      console.error("Error fetching exercises from AI service:", error);
+      // Return default list if service is unavailable
+      return ["push-up", "squat", "pull-up", "sit-up", "plank"];
+    }
+  }
+};
+
+// Reward API for Reward Management
+export const rewardAPI = {
+  getAll: AdminAPI.getRewards,
+  getRewards: AdminAPI.getRewards,
+  getRewardById: AdminAPI.getRewardById,
+  create: AdminAPI.createReward,
+  update: AdminAPI.updateReward,
+  delete: AdminAPI.deleteReward
+};
+
+// Transaction API for Transaction Management
 export const transactionAPI = {
-  getAll: () => callAPIWithFallback(() => client.get('/admin/transaction'), MOCK_TRANSACTIONS, 'GET /admin/transaction'),
-  create: (data: any) => callAPIWithFallback(() => client.post('/admin/transaction', data), MOCK_TRANSACTIONS, 'POST /admin/transaction'),
-  update: (id: number, data: any) => callAPIWithFallback(() => client.put(`/admin/transaction/${id}`, data), MOCK_TRANSACTIONS, `PUT /admin/transaction/${id}`),
-  delete: (id: number) => callAPIWithFallback(() => client.delete(`/admin/transaction/${id}`), MOCK_TRANSACTIONS, `DELETE /admin/transaction/${id}`),
+  getAll: AdminAPI.getTransactions,
+  getTransactions: AdminAPI.getTransactions,
+  getTransactionById: AdminAPI.getTransactionById,
+  create: AdminAPI.createTransaction,
+  update: AdminAPI.updateTransaction
 };
 
-// -------------------------------
-// Goals API
-// -------------------------------
+// Training Plan API for Training Plan Management
+export const trainingPlanAPI = {
+  getAll: AdminAPI.getTrainingPlans,
+  getTrainingPlans: AdminAPI.getTrainingPlans,
+  getTrainingPlanById: AdminAPI.getTrainingPlanById,
+  create: AdminAPI.createTrainingPlan,
+  update: AdminAPI.updateTrainingPlan,
+  delete: AdminAPI.deleteTrainingPlan,
+  getById: (userId: number) => client.get(`/admin/users/${userId}/training-plans`),
+  assignTrainingPlan: (userId: number, trainingPlanId: number) => client.post(`/admin/users/${userId}/training-plans/${trainingPlanId}`),
+  removeTrainingPlan: (userId: number, trainingPlanId: number) => client.delete(`/admin/users/${userId}/training-plans/${trainingPlanId}`),
+  // Personalized Plan Details (for admin to view/edit user's customized plan)
+  getPersonalizedDetails: (userId: number, utId: number) => 
+    client.get(`/admin/users/${userId}/training-plans/${utId}/personalized-details`),
+  updatePersonalizedDetail: (userId: number, utId: number, ppdId: number, data: any) =>
+    client.put(`/admin/users/${userId}/training-plans/${utId}/personalized-details/${ppdId}`, data)
+};
+
+// Goal API for Goal Management
 export const goalAPI = {
-  getAll: () => callAPIWithFallback(() => client.get('/admin/goals'), MOCK_GOALS, 'GET /admin/goal'),
-  create: (data: any) => callAPIWithFallback(() => client.post('/admin/goals', data), MOCK_GOALS, 'POST /admin/goal'),
-  update: (id: number, data: any) => callAPIWithFallback(() => client.put(`/admin/goals/${id}`, data), MOCK_GOALS, `PUT /admin/goal/${id}`),
-  delete: (id: number) => callAPIWithFallback(() => client.delete(`/admin/goals/${id}`), MOCK_GOALS, `DELETE /admin/goal/${id}`),
+  getAll: AdminAPI.getGoals,
+  getGoals: AdminAPI.getGoals,
+  getGoalById: AdminAPI.getGoalById,
+  create: AdminAPI.createGoal,
+  update: AdminAPI.updateGoal,
+  delete: AdminAPI.deleteGoal
 };
 
+// Meal API for Meal Management
+export const mealAPI = {
+  getAll: AdminAPI.getMeals,
+  getMeals: AdminAPI.getMeals,
+  getMealById: AdminAPI.getMealById,
+  create: AdminAPI.createMeal,
+  update: AdminAPI.updateMeal,
+  delete: AdminAPI.deleteMeal
+};
 
-export default client;
+// Food API for Food Management
+export const foodAPI = {
+  getAll: AdminAPI.getFoods,
+  getFoods: AdminAPI.getFoods,
+  getFoodById: AdminAPI.getFoodById,
+  create: AdminAPI.createFood,
+  update: AdminAPI.updateFood,
+  delete: AdminAPI.deleteFood
+};
+
+// Nutrition Plan API for Nutrition Plan Management
+export const nutritionPlanAPI = {
+  getAll: AdminAPI.getNutritionPlans,
+  getNutritionPlans: AdminAPI.getNutritionPlans,
+  getNutritionPlanById: AdminAPI.getNutritionPlanById,
+  create: AdminAPI.createNutritionPlan,
+  update: AdminAPI.updateNutritionPlan,
+  delete: AdminAPI.deleteNutritionPlan
+};

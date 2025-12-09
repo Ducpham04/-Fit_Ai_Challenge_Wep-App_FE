@@ -36,12 +36,13 @@ export const ProgressBar = ({
           )}
         </div>
       )}
-      <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+      <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden relative">
         <motion.div
           initial={{ width: 0 }}
-          animate={{ width: `${percentage}%` }}
+          animate={{ width: `${Math.max(0, Math.min(100, percentage))}%` }}
           transition={{ duration: 0.5, ease: 'easeOut' }}
           className={`h-full ${colorClasses[color]} rounded-full`}
+          style={{ minWidth: percentage > 0 ? '2px' : '0px' }}
         />
       </div>
     </div>

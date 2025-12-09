@@ -1,7 +1,27 @@
-import { useState, useMemo } from "react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
-import { ArrowLeft, Calendar, Users, BarChart3, Plus, Edit2, Trash2, Dumbbell, AlertCircle } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
+import { ArrowLeft, Calendar, Users, BarChart3, Plus, Edit2, Trash2, Dumbbell, AlertCircle, Loader2, X } from "lucide-react";
 import { AdminTrainingPlan } from "../types/admin-entities";
+import client from "@/api/client";
+import { challengeAPI } from "../api/adminAPI";
+
+interface TrainingPlanDetailDTO {
+  tpdId: number;
+  trainingPlanId: number;
+  trainingPlanTitle: string;
+  dayNumber: number;
+  challenge: {
+    id: number;
+    title: string;
+    description: string;
+    difficult: string;
+    linkVideos?: string;
+    status: string;
+  };
+  challengeName: string;
+  sets: number;
+  reps: number;
+}
 
 interface DayExercise {
   dayNumber: number;
@@ -33,92 +53,225 @@ interface TrainingPlanDetailsPageProps {
 const TAB_IDS = ["overview", "exercises", "users"] as const;
 type TabId = (typeof TAB_IDS)[number];
 
-// Mock data
-const MOCK_DAY_EXERCISES: DayExercise[] = [
-  {
-    dayNumber: 1,
-    dayName: "Monday",
-    exercises: [
-      { id: 1, name: "Warm-up", sets: 2, reps: 10, challengeName: "General Warm-up" },
-      { id: 2, name: "Push-ups", sets: 3, reps: 15, challengeId: 1, challengeName: "30-Day Push-up" },
-      { id: 3, name: "Planks", sets: 3, reps: 60, challengeId: 2, challengeName: "Plank Hold" },
-    ],
-  },
-  {
-    dayNumber: 2,
-    dayName: "Tuesday",
-    exercises: [
-      { id: 4, name: "Squats", sets: 3, reps: 20 },
-      { id: 5, name: "Lunges", sets: 3, reps: 15 },
-      { id: 6, name: "Leg Press", sets: 3, reps: 12 },
-    ],
-  },
-  {
-    dayNumber: 3,
-    dayName: "Wednesday",
-    exercises: [
-      { id: 7, name: "Rest Day", sets: 1, reps: 0 },
-    ],
-  },
-  {
-    dayNumber: 4,
-    dayName: "Thursday",
-    exercises: [
-      { id: 8, name: "Pull-ups", sets: 3, reps: 10 },
-      { id: 9, name: "Rows", sets: 3, reps: 12 },
-      { id: 10, name: "Lat Pulldowns", sets: 3, reps: 15 },
-    ],
-  },
-  {
-    dayNumber: 5,
-    dayName: "Friday",
-    exercises: [
-      { id: 11, name: "Bicep Curls", sets: 3, reps: 12 },
-      { id: 12, name: "Tricep Dips", sets: 3, reps: 10 },
-      { id: 13, name: "Shoulder Press", sets: 3, reps: 10 },
-    ],
-  },
-  {
-    dayNumber: 6,
-    dayName: "Saturday",
-    exercises: [
-      { id: 14, name: "Cardio", sets: 1, reps: 30, challengeName: "10k Steps Daily" },
-      { id: 15, name: "Stretching", sets: 2, reps: 15 },
-    ],
-  },
-  {
-    dayNumber: 7,
-    dayName: "Sunday",
-    exercises: [
-      { id: 16, name: "Rest Day", sets: 1, reps: 0 },
-    ],
-  },
-];
-
-const MOCK_USERS_FOLLOWING: UserFollowing[] = [
-  { id: 101, username: "nguyen.van.a", email: "a@example.com", startDate: "2024-01-01", completedDays: 45, totalDays: 60 },
-  { id: 102, username: "tran.thi.b", email: "b@example.com", startDate: "2024-01-05", completedDays: 40, totalDays: 56 },
-  { id: 103, username: "pham.van.c", email: "c@example.com", startDate: "2024-01-10", completedDays: 30, totalDays: 51 },
-  { id: 104, username: "hoang.thi.d", email: "d@example.com", startDate: "2024-01-15", completedDays: 20, totalDays: 46 },
-  { id: 105, username: "vo.van.e", email: "e@example.com", startDate: "2024-01-20", completedDays: 15, totalDays: 41 },
-];
+// Day names mapping
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 export function TrainingPlanDetailsPage({ plan, onBack }: TrainingPlanDetailsPageProps) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [editingDay, setEditingDay] = useState<number | null>(null);
+  const [planDetails, setPlanDetails] = useState<TrainingPlanDetailDTO[]>([]);
+  const [usersFollowing, setUsersFollowing] = useState<UserFollowing[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showAddDayModal, setShowAddDayModal] = useState(false);
+  const [challenges, setChallenges] = useState<any[]>([]);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; name: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [editingDetail, setEditingDetail] = useState<TrainingPlanDetailDTO | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [newDayForm, setNewDayForm] = useState<{
+    dayNumber: number;
+    challengeId: number;
+    sets: number;
+    reps: number;
+    duration?: number;
+  }>({
+    dayNumber: 1,
+    challengeId: 0,
+    sets: 0,
+    reps: 0,
+    duration: undefined,
+  });
+
+  // Load training plan details from API
+  useEffect(() => {
+    const loadData = async () => {
+      // Check if plan.id exists
+      const planId = plan?.id;
+      if (!planId) {
+        setError("Training plan ID is missing");
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        // Load training plan details
+        const detailsResponse = await client.get(`/admin/training-plan-details/plan/${planId}`);
+        const detailsData = detailsResponse.data?.data || [];
+        setPlanDetails(detailsData);
+
+        // Load users following this plan
+        try {
+          const usersResponse = await client.get(`/admin/training-plans/${planId}/users`);
+          const usersData = usersResponse.data?.data || [];
+          setUsersFollowing(
+            usersData.map((user: any) => ({
+              id: user.id,
+              username: user.username || `User ${user.id}`,
+              email: user.email || "",
+              startDate: user.startDate || new Date().toISOString().split("T")[0],
+              completedDays: user.completedDays || 0,
+              totalDays: user.totalDays || 0,
+            }))
+          );
+        } catch (err) {
+          console.warn("Could not load users following plan:", err);
+          setUsersFollowing([]);
+        }
+      } catch (err: any) {
+        console.error("Error loading training plan details:", err);
+        setError(err?.response?.data?.message || err?.message || "Failed to load training plan details");
+        setPlanDetails([]);
+        setUsersFollowing([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, [plan?.id]);
+
+  // Load challenges when opening add day modal
+  useEffect(() => {
+    if (showAddDayModal) {
+      const loadChallenges = async () => {
+        try {
+          const response = await challengeAPI.getAll();
+          const challengesData = response.data?.data || response.data || [];
+          setChallenges(Array.isArray(challengesData) ? challengesData : []);
+        } catch (err) {
+          console.error("Error loading challenges:", err);
+          setChallenges([]);
+        }
+      };
+      loadChallenges();
+    }
+  }, [showAddDayModal]);
+
+  // Convert API data to DayExercise format
+  const dayExercises = useMemo(() => {
+    if (planDetails.length === 0) return [];
+
+    // Group by day number
+    const groupedByDay = planDetails.reduce((acc, detail) => {
+      const dayNumber = detail.dayNumber;
+      if (!acc[dayNumber]) {
+        acc[dayNumber] = [];
+      }
+      acc[dayNumber].push(detail);
+      return acc;
+    }, {} as { [key: number]: TrainingPlanDetailDTO[] });
+
+    // Convert to DayExercise format
+    return Object.entries(groupedByDay)
+      .sort(([a], [b]) => parseInt(a) - parseInt(b))
+      .map(([dayNumStr, details]) => {
+        const dayNumber = parseInt(dayNumStr);
+        const dayName = DAY_NAMES[(dayNumber - 1) % 7] || `Day ${dayNumber}`;
+        
+        return {
+          dayNumber,
+          dayName,
+          exercises: details.map((detail) => ({
+            id: detail.tpdId,
+            name: detail.challengeName || detail.challenge?.title || "Exercise",
+            sets: detail.sets,
+            reps: detail.reps,
+            challengeId: detail.challenge?.id,
+            challengeName: detail.challengeName || detail.challenge?.title,
+          })),
+        };
+      });
+  }, [planDetails]);
 
   const stats = useMemo(() => {
     return {
-      totalUsers: MOCK_USERS_FOLLOWING.length,
-      averageCompletion: Math.round(
-        (MOCK_USERS_FOLLOWING.reduce((sum, u) => sum + (u.completedDays / u.totalDays) * 100, 0) /
-          Math.max(MOCK_USERS_FOLLOWING.length, 1)) *
-          10
-      ) / 10,
-      totalExercises: MOCK_DAY_EXERCISES.reduce((sum, day) => sum + day.exercises.length, 0),
-      weekDays: MOCK_DAY_EXERCISES.filter((d) => d.dayName !== "Wednesday" && d.dayName !== "Sunday").length,
+      totalUsers: usersFollowing.length,
+      averageCompletion: usersFollowing.length > 0
+        ? Math.round(
+            (usersFollowing.reduce((sum, u) => sum + (u.completedDays / u.totalDays) * 100, 0) /
+              usersFollowing.length) *
+              10
+          ) / 10
+        : 0,
+      totalExercises: dayExercises.reduce((sum, day) => sum + day.exercises.length, 0),
+      weekDays: dayExercises.length,
     };
-  }, []);
+  }, [dayExercises, usersFollowing]);
+
+  // Early return if plan is not available
+  if (!plan || !plan.id) {
+    return (
+      <div className="p-8 space-y-6">
+        <div className="flex items-center gap-4 mb-6">
+          <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-lg transition">
+            <ArrowLeft size={24} className="text-gray-600" />
+          </button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Training Plan Details</h1>
+            <p className="text-gray-600">Invalid training plan</p>
+          </div>
+        </div>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-6 h-6 text-red-600" />
+            <div>
+              <h3 className="font-semibold text-red-900">Error</h3>
+              <p className="text-sm text-red-700 mt-1">Training plan ID is missing. Please go back and select a valid plan.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="p-8 space-y-6">
+        <div className="flex items-center gap-4 mb-6">
+          <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-lg transition">
+            <ArrowLeft size={24} className="text-gray-600" />
+          </button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">{plan.title || "Training Plan"}</h1>
+            <p className="text-gray-600">Training Plan Details</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <span className="ml-3 text-gray-600">Loading training plan details...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8 space-y-6">
+        <div className="flex items-center gap-4 mb-6">
+          <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-lg transition">
+            <ArrowLeft size={24} className="text-gray-600" />
+          </button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">{plan.title}</h1>
+            <p className="text-gray-600">Training Plan Details</p>
+          </div>
+        </div>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-6 h-6 text-red-600" />
+            <div>
+              <h3 className="font-semibold text-red-900">Error Loading Data</h3>
+              <p className="text-sm text-red-700 mt-1">{error}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-6">
@@ -190,17 +343,19 @@ export function TrainingPlanDetailsPage({ plan, onBack }: TrainingPlanDetailsPag
                     <p className="font-semibold text-gray-900 mt-1">{plan.title}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600 uppercase">Details</p>
-                    <p className="text-gray-900 mt-1">Comprehensive training program with 7 days of exercises</p>
+                    <p className="text-sm text-gray-600 uppercase">Description</p>
+                    <p className="text-gray-900 mt-1">{plan.description || "No description available"}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600 uppercase">Duration</p>
-                    <p className="font-semibold text-gray-900 mt-1">4 weeks</p>
+                    <p className="font-semibold text-gray-900 mt-1">
+                      {plan.durationWeeks ? `${plan.durationWeeks} weeks` : "N/A"}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600 uppercase">Level</p>
                     <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded text-sm font-medium mt-1 capitalize">
-                      beginner
+                      {plan.difficultyLevel?.toLowerCase() || "N/A"}
                     </span>
                   </div>
                 </div>
@@ -240,13 +395,35 @@ export function TrainingPlanDetailsPage({ plan, onBack }: TrainingPlanDetailsPag
           <div className="bg-white p-6 rounded-lg shadow space-y-6">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-bold text-gray-900">Weekly Exercise Schedule</h3>
-              <Button className="flex items-center gap-2">
+              <Button 
+                className="flex items-center gap-2"
+                onClick={() => {
+                  // Calculate next day number
+                  const maxDay = dayExercises.length > 0
+                    ? Math.max(...dayExercises.map(d => d.dayNumber))
+                    : 0;
+                  setNewDayForm({
+                    dayNumber: maxDay + 1,
+                    challengeId: 0,
+                    sets: 0,
+                    reps: 0,
+                    duration: undefined,
+                  });
+                  setShowAddDayModal(true);
+                }}
+              >
                 <Plus size={16} /> Add Day
               </Button>
             </div>
 
             <div className="space-y-4">
-              {MOCK_DAY_EXERCISES.map((day) => (
+              {dayExercises.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No exercises found for this training plan.</p>
+                  <p className="text-sm mt-2">Add exercises using the "Add Day" button above.</p>
+                </div>
+              ) : (
+                dayExercises.map((day) => (
                 <div key={day.dayNumber} className="border rounded-lg p-4 hover:bg-gray-50 transition">
                   <div className="flex items-center justify-between mb-4">
                     <h4 className="text-lg font-bold text-gray-900">Day {day.dayNumber}: {day.dayName}</h4>
@@ -279,10 +456,29 @@ export function TrainingPlanDetailsPage({ plan, onBack }: TrainingPlanDetailsPag
                             )}
                           </div>
                           <div className="flex gap-2">
-                            <button className="p-1 hover:bg-blue-100 rounded text-blue-600">
+                            <button 
+                              onClick={() => {
+                                // Find the detail from planDetails
+                                const detail = planDetails.find(d => d.tpdId === exercise.id);
+                                if (detail) {
+                                  setEditingDetail(detail);
+                                }
+                              }}
+                              className="p-1 hover:bg-blue-100 rounded text-blue-600 transition"
+                              title="Edit exercise"
+                            >
                               <Edit2 size={14} />
                             </button>
-                            <button className="p-1 hover:bg-red-100 rounded text-red-600">
+                            <button 
+                              onClick={() => {
+                                setDeleteConfirm({
+                                  id: exercise.id,
+                                  name: exercise.name
+                                });
+                              }}
+                              className="p-1 hover:bg-red-100 rounded text-red-600 transition"
+                              title="Delete exercise"
+                            >
                               <Trash2 size={14} />
                             </button>
                           </div>
@@ -320,7 +516,471 @@ export function TrainingPlanDetailsPage({ plan, onBack }: TrainingPlanDetailsPag
                     </div>
                   )}
                 </div>
-              ))}
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {deleteConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+              <div className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-red-100 rounded-full">
+                    <AlertCircle className="w-6 h-6 text-red-600" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">Delete Exercise</h3>
+                </div>
+                <p className="text-gray-700 mb-6">
+                  Are you sure you want to delete <span className="font-semibold">"{deleteConfirm.name}"</span>? 
+                  This action cannot be undone.
+                </p>
+                <div className="flex gap-3 justify-end">
+                  <Button
+                    variant="outline"
+                    onClick={() => setDeleteConfirm(null)}
+                    disabled={isDeleting}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={async () => {
+                      if (!deleteConfirm) return;
+                      
+                      try {
+                        setIsDeleting(true);
+                        const response = await client.delete(
+                          `/admin/training-plan-details/${deleteConfirm.id}`
+                        );
+
+                        if (response.data?.success) {
+                          // Reload plan details
+                          const detailsResponse = await client.get(
+                            `/admin/training-plan-details/plan/${plan.id}`
+                          );
+                          const updatedDetails = detailsResponse.data?.data || [];
+                          setPlanDetails(updatedDetails);
+                          
+                          setDeleteConfirm(null);
+                          // Show success message
+                          alert("Exercise deleted successfully!");
+                        } else {
+                          alert(response.data?.message || "Error deleting exercise");
+                        }
+                      } catch (error: any) {
+                        console.error("Error deleting exercise:", error);
+                        alert(error?.response?.data?.message || "Error deleting exercise");
+                      } finally {
+                        setIsDeleting(false);
+                      }
+                    }}
+                    disabled={isDeleting}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    {isDeleting ? (
+                      <span className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Deleting...
+                      </span>
+                    ) : (
+                      "Delete"
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Detail Modal */}
+        {editingDetail && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Edit Training Plan Detail</h2>
+                  <p className="text-sm text-gray-600 mt-1">Update exercise details for Day {editingDetail.dayNumber}</p>
+                </div>
+                <button
+                  onClick={() => setEditingDetail(null)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition"
+                >
+                  <X size={24} className="text-gray-600" />
+                </button>
+              </div>
+
+              {/* Form */}
+              <div className="p-6 overflow-y-auto flex-1">
+                <div className="space-y-4">
+                  {/* Day Number */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Day Number
+                    </label>
+                    <input
+                      type="number"
+                      value={editingDetail.dayNumber}
+                      onChange={(e) => setEditingDetail({
+                        ...editingDetail,
+                        dayNumber: parseInt(e.target.value) || 1
+                      })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      min="1"
+                    />
+                  </div>
+
+                  {/* Challenge Selection */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Challenge
+                    </label>
+                    <select
+                      value={editingDetail.challenge.id}
+                      onChange={(e) => {
+                        const selectedChallenge = challenges.find(c => c.id === parseInt(e.target.value));
+                        if (selectedChallenge) {
+                          setEditingDetail({
+                            ...editingDetail,
+                            challenge: {
+                              ...editingDetail.challenge,
+                              id: selectedChallenge.id,
+                              title: selectedChallenge.title || selectedChallenge.name,
+                            },
+                            challengeName: selectedChallenge.title || selectedChallenge.name
+                          });
+                        }
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value={0}>Select a challenge</option>
+                      {challenges.map((challenge) => (
+                        <option key={challenge.id} value={challenge.id}>
+                          {challenge.title || challenge.name} ({challenge.difficult || challenge.difficulty})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Sets and Reps */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Sets
+                      </label>
+                      <input
+                        type="number"
+                        value={editingDetail.sets}
+                        onChange={(e) => setEditingDetail({
+                          ...editingDetail,
+                          sets: parseInt(e.target.value) || 0
+                        })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        min="1"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Reps
+                      </label>
+                      <input
+                        type="number"
+                        value={editingDetail.reps}
+                        onChange={(e) => setEditingDetail({
+                          ...editingDetail,
+                          reps: parseInt(e.target.value) || 0
+                        })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        min="1"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Current Challenge Info */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm font-medium text-blue-900 mb-1">Current Challenge</p>
+                    <p className="text-sm text-blue-700">{editingDetail.challengeName || editingDetail.challenge.title}</p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      Difficulty: {editingDetail.challenge.difficult}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
+                <Button
+                  variant="outline"
+                  onClick={() => setEditingDetail(null)}
+                  disabled={isUpdating}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={async () => {
+                    if (!editingDetail) return;
+                    
+                    try {
+                      setIsUpdating(true);
+                      
+                      const response = await client.put(
+                        `/admin/training-plan-details/${editingDetail.tpdId}`,
+                        {
+                          trainingPlanId: editingDetail.trainingPlanId,
+                          dayNumber: editingDetail.dayNumber,
+                          challengeId: editingDetail.challenge.id,
+                          sets: editingDetail.sets,
+                          reps: editingDetail.reps,
+                        }
+                      );
+
+                      if (response.data?.success) {
+                        // Reload plan details
+                        const detailsResponse = await client.get(
+                          `/admin/training-plan-details/plan/${plan.id}`
+                        );
+                        const updatedDetails = detailsResponse.data?.data || [];
+                        setPlanDetails(updatedDetails);
+                        
+                        setEditingDetail(null);
+                        // Show success message
+                        alert("Training plan detail updated successfully!");
+                      } else {
+                        alert(response.data?.message || "Error updating detail");
+                      }
+                    } catch (error: any) {
+                      console.error("Error updating detail:", error);
+                      alert(error?.response?.data?.message || "Error updating training plan detail");
+                    } finally {
+                      setIsUpdating(false);
+                    }
+                  }}
+                  disabled={isUpdating}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {isUpdating ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Updating...
+                    </span>
+                  ) : (
+                    "Update Detail"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Day Modal */}
+        {showAddDayModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Add New Day</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Training Plan: {plan.title} | Day {newDayForm.dayNumber}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowAddDayModal(false);
+                    setNewDayForm({
+                      dayNumber: 1,
+                      challengeId: 0,
+                      sets: 0,
+                      reps: 0,
+                      duration: undefined,
+                    });
+                  }}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition"
+                >
+                  <X size={24} className="text-gray-600" />
+                </button>
+              </div>
+              
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Day Number *
+                    </label>
+                    <input
+                      type="number"
+                      value={newDayForm.dayNumber}
+                      onChange={(e) => {
+                        setNewDayForm({
+                          ...newDayForm,
+                          dayNumber: parseInt(e.target.value) || 1,
+                        });
+                      }}
+                      className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      min="1"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Challenge *
+                    </label>
+                    <select
+                      value={newDayForm.challengeId}
+                      onChange={(e) => {
+                        setNewDayForm({
+                          ...newDayForm,
+                          challengeId: parseInt(e.target.value) || 0,
+                        });
+                      }}
+                      className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    >
+                      <option value={0}>Select Challenge</option>
+                      {challenges.map((challenge) => (
+                        <option key={challenge.id} value={challenge.id}>
+                          {challenge.title || challenge.name || `Challenge ${challenge.id}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">
+                        Sets *
+                      </label>
+                      <input
+                        type="number"
+                        value={newDayForm.sets || ""}
+                        onChange={(e) => {
+                          setNewDayForm({
+                            ...newDayForm,
+                            sets: parseInt(e.target.value) || 0,
+                          });
+                        }}
+                        className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        min="1"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">
+                        Reps *
+                      </label>
+                      <input
+                        type="number"
+                        value={newDayForm.reps || ""}
+                        onChange={(e) => {
+                          setNewDayForm({
+                            ...newDayForm,
+                            reps: parseInt(e.target.value) || 0,
+                          });
+                        }}
+                        className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        min="1"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Duration (seconds) <span className="text-gray-500 text-xs">(Optional)</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={newDayForm.duration || ""}
+                      onChange={(e) => {
+                        setNewDayForm({
+                          ...newDayForm,
+                          duration: parseInt(e.target.value) || undefined,
+                        });
+                      }}
+                      className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      min="0"
+                      placeholder="Optional"
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowAddDayModal(false);
+                    setNewDayForm({
+                      dayNumber: 1,
+                      challengeId: 0,
+                      sets: 0,
+                      reps: 0,
+                      duration: undefined,
+                    });
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={async () => {
+                    if (!newDayForm.challengeId || !newDayForm.sets || !newDayForm.reps) {
+                      alert("Please fill in all required fields (Challenge, Sets, Reps)");
+                      return;
+                    }
+
+                    try {
+                      const response = await client.post(
+                        `/admin/training-plan-details`,
+                        {
+                          trainingPlanId: plan.id,
+                          dayNumber: newDayForm.dayNumber,
+                          challengeId: newDayForm.challengeId,
+                          sets: newDayForm.sets,
+                          reps: newDayForm.reps,
+                          duration: newDayForm.duration,
+                        }
+                      );
+
+                      if (response.data?.success) {
+                        // Reload plan details
+                        const detailsResponse = await client.get(
+                          `/admin/training-plan-details/plan/${plan.id}`
+                        );
+                        const updatedDetails = detailsResponse.data?.data || [];
+                        setPlanDetails(updatedDetails);
+
+                        // Close modal and reset form
+                        setShowAddDayModal(false);
+                        setNewDayForm({
+                          dayNumber: 1,
+                          challengeId: 0,
+                          sets: 0,
+                          reps: 0,
+                          duration: undefined,
+                        });
+
+                        alert("Day added successfully!");
+                      } else {
+                        alert(response.data?.message || "Error adding day");
+                      }
+                    } catch (error: any) {
+                      console.error("Error adding day:", error);
+                      alert(error?.response?.data?.message || "Error adding training plan detail");
+                    }
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <Plus size={14} className="mr-1" />
+                  Add Day
+                </Button>
+              </div>
             </div>
           </div>
         )}
@@ -328,51 +988,61 @@ export function TrainingPlanDetailsPage({ plan, onBack }: TrainingPlanDetailsPag
         {/* Users Following Tab */}
         {activeTab === "users" && (
           <div className="bg-white p-6 rounded-lg shadow space-y-6">
-            <h3 className="text-lg font-bold text-gray-900">Users Following This Plan ({MOCK_USERS_FOLLOWING.length})</h3>
+            <h3 className="text-lg font-bold text-gray-900">
+              Users Following This Plan ({usersFollowing.length})
+            </h3>
 
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">User</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Email</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Started</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Progress</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Completion %</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {MOCK_USERS_FOLLOWING.map((user) => {
-                    const completionPercent = Math.round((user.completedDays / user.totalDays) * 100);
-                    return (
-                      <tr key={user.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{user.username}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{user.email}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">
-                          {new Date(user.startDate).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          <span className="text-gray-900 font-medium">
-                            {user.completedDays}/{user.totalDays} days
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-20 bg-gray-200 rounded-full h-2">
-                              <div
-                                className="bg-green-600 h-2 rounded-full"
-                                style={{ width: `${completionPercent}%` }}
-                              />
+            {usersFollowing.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Users className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                <p>No users are currently following this training plan.</p>
+                <p className="text-sm mt-2">Users will appear here once they start this plan.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">User</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Email</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Started</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Progress</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Completion %</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {usersFollowing.map((user) => {
+                      const completionPercent = Math.round((user.completedDays / user.totalDays) * 100);
+                      return (
+                        <tr key={user.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900">{user.username}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{user.email}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {new Date(user.startDate).toLocaleDateString()}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className="text-gray-900 font-medium">
+                              {user.completedDays}/{user.totalDays} days
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-20 bg-gray-200 rounded-full h-2">
+                                <div
+                                  className="bg-green-600 h-2 rounded-full"
+                                  style={{ width: `${completionPercent}%` }}
+                                />
+                              </div>
+                              <span className="text-sm font-medium text-gray-900 min-w-fit">{completionPercent}%</span>
                             </div>
-                            <span className="text-sm font-medium text-gray-900 min-w-fit">{completionPercent}%</span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>

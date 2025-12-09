@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
 import { ArrowLeft, Play, Loader, TrendingUp, Clock, AlertCircle, BarChart3, Filter } from "lucide-react";
 import { AdminChallenge } from "../types/admin-entities";
 

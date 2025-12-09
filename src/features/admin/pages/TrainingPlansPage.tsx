@@ -1,18 +1,20 @@
 import { useMemo, useState, useEffect } from "react";
-import { SimpleButton as Button } from "@/components_1/ui/simple-button";
-import { Plus, Dumbbell, BookOpen, Search, AlertCircle } from "lucide-react";
-import { SimpleInput as Input } from "@/components_1/ui/simple-input";
-import { SimpleModal } from "@/components_1/ui/simple-modal";
-import { SimpleSelect } from "@/components_1/ui/simple-select";
-import { FormField } from "@/components_1/ui/form-field";
+import { SimpleButton as Button } from "@/components/ui/simple-button";
+import { Plus, Dumbbell, BookOpen, Search, AlertCircle, Edit2, Trash2, Eye, Target, Calendar, Users } from "lucide-react";
+import { SimpleInput as Input } from "@/components/ui/simple-input";
+import { SimpleModal } from "@/components/ui/simple-modal";
+import { SimpleSelect } from "@/components/ui/simple-select";
+import { FormField } from "@/components/ui/form-field";
+import { SimpleTextarea as Textarea } from "@/components/ui/simple-textarea";
 import { goalAPI, trainingPlanAPI } from "../api/adminAPI";
 import {
   AdminTrainingPlan,
   TrainingPlanPayload,
 } from "../types/admin-entities";
 import { TrainingPlanDetailsPage } from "./TrainingPlanDetailsPage";
+import { extractDataFromResponse, isResponseSuccess, getErrorMessage } from "../utils/responseHelper";
 
-const EMPTY_PLAN: TrainingPlanPayload = {
+const EMPTY_PLAN: TrainingPlanPayload & { description?: string } = {
   title: "",
   durationWeeks: "",
   difficultyLevel: "beginner",
@@ -23,6 +25,7 @@ const EMPTY_PLAN: TrainingPlanPayload = {
   goalId: 0,
   goalName: "",
   createAt: new Date().toISOString().slice(0, 10),
+  description: "",
 };
 
 type ModalMode = "create" | "edit";
@@ -44,7 +47,7 @@ export function TrainingPlansPage() {
     open: false,
     mode: "create",
   });
-  const [form, setForm] = useState<TrainingPlanPayload>(EMPTY_PLAN);
+  const [form, setForm] = useState<TrainingPlanPayload & { description?: string }>(EMPTY_PLAN);
   const [deleteTarget, setDeleteTarget] = useState<AdminTrainingPlan | null>(
     null
   );
@@ -87,20 +90,36 @@ export function TrainingPlansPage() {
       console.log("📤 [TrainingPlansPage] Fetching training plans...");
       const response = await trainingPlanAPI.getAll();
       console.log("✅ [TrainingPlansPage] Full response:", response);
-      let data = [];
-      if (Array.isArray(response.data)) {
-        data = response.data;
-      } else if (Array.isArray(response.data?.data)) {
-        data = response.data.data;
-      }
-      console.log("📋 [TrainingPlansPage] Extracted data:", data);
-      setTrainingPlans(Array.isArray(data) ? data : []);
+      
+      // Extract data using helper function
+      const rawData = extractDataFromResponse<any>(response);
+      console.log("📋 [TrainingPlansPage] Extracted data:", rawData);
+      
+      // Map backend response (tpId) to frontend format (id)
+      const data: AdminTrainingPlan[] = rawData.map((plan: any) => {
+        const mappedPlan = {
+          ...plan,
+          id: plan.tpId || plan.id, // Backend uses tpId, prioritize tpId over id
+          linkImage: plan.linkImage || plan.goalImageLink || null, // Get goal image
+        };
+        console.log("📋 [TrainingPlansPage] Mapped plan:", {
+          original: plan,
+          mapped: mappedPlan,
+          tpId: plan.tpId,
+          id: plan.id,
+          linkImage: mappedPlan.linkImage,
+          finalId: mappedPlan.id
+        });
+        return mappedPlan;
+      });
+      
+      setTrainingPlans(data);
     } catch (error: any) {
       console.error(
         "❌ [TrainingPlansPage] Error fetching training plans:",
         error
       );
-      setError(error?.message || "Không thể tải danh sách training plans");
+      setError(error?.response?.data?.message || error?.message || "Không thể tải danh sách training plans");
     } finally {
       setLoading(false);
     }
@@ -161,10 +180,39 @@ export function TrainingPlansPage() {
 
   const handleDelete = async (id: number) => {
     try {
+      setSubmitLoading(true);
       setError(null);
+      
+      // Ensure we have a valid ID
+      if (!id || id === 0) {
+        setError("ID không hợp lệ. Vui lòng thử lại.");
+        return;
+      }
+      
       console.log("🗑️ [TrainingPlansPage] Deleting training plan ID:", id);
-      await trainingPlanAPI.delete(id);
-      console.log("✅ Training plan deleted successfully");
+      console.log("🗑️ [TrainingPlansPage] Delete target:", deleteTarget);
+      
+      const response = await trainingPlanAPI.delete(id);
+      console.log("📥 Delete response:", response);
+      
+      // Check if response is successful
+      const isSuccess = isResponseSuccess(response);
+      console.log("🔍 Response success check:", isSuccess, "Response data:", response?.data);
+      
+      if (!isSuccess) {
+        const errorMsg = getErrorMessage(response, "Không thể xóa training plan. Vui lòng thử lại.");
+        console.error("❌ API returned unsuccessful response:", {
+          response,
+          responseData: response?.data,
+          success: response?.data?.success,
+          message: response?.data?.message
+        });
+        setError(errorMsg);
+        return; // Don't reload or close modal if delete failed
+      }
+
+      console.log("✅ Training plan deleted successfully, reloading data...");
+      // Only reload and close modal if delete was successful
       await fetchTrainingPlans();
       setDeleteTarget(null);
     } catch (error: any) {
@@ -172,7 +220,12 @@ export function TrainingPlansPage() {
         "❌ [TrainingPlansPage] Error deleting training plan:",
         error
       );
-      setError(error?.message || "Không thể xóa training plan");
+      const errorMsg = error?.response?.data?.message 
+        || error?.message 
+        || "Không thể xóa training plan. Vui lòng thử lại.";
+      setError(errorMsg);
+    } finally {
+      setSubmitLoading(false);
     }
   };
 
@@ -228,19 +281,16 @@ export function TrainingPlansPage() {
                 Thư viện chương trình tập
               </h1>
               <p className="text-gray-600 mt-2">
-                Quản lý pricing, độ khó và số người subscribe từng plan
+                Quản lý chương trình tập luyện, độ khó và số người tham gia
               </p>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" className="flex items-center gap-2">
-                Xuất CSV
-              </Button>
               <Button
-                className="flex items-center gap-2 px-4 py-2"
+                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-sky-600 via-sky-700 to-sky-800 hover:from-sky-700 hover:via-sky-800 hover:to-sky-900 text-white font-bold shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 rounded-lg border-0"
                 onClick={openCreateModal}
               >
-                <Plus size={16} />
-                Plan mới
+                <Plus size={20} />
+                <span className="font-semibold">Plan mới</span>
               </Button>
             </div>
           </div>
@@ -305,111 +355,141 @@ export function TrainingPlansPage() {
             />
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                <tr>
-                  <th className="px-6 py-3 text-left">Plan</th>
-                  <th className="px-6 py-3 text-left">Thời lượng</th>
-                  <th className="px-6 py-3 text-left">Độ khó</th>
-                  <th className="px-6 py-3 text-left">Subscribers</th>
-                  <th className="px-6 py-3 text-left">Giá</th>
-                  <th className="px-6 py-3 text-left">Status</th>
-                  <th className="px-6 py-3 text-left">Focus</th>
-                  <th className="px-6 py-3"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filtered.map((plan) => (
-                  <tr key={plan.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-sky-100 rounded-lg">
-                          <BookOpen size={18} className="text-sky-600" />
+          {/* Card Grid Layout */}
+          {loading ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-600"></div>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+              <BookOpen className="mx-auto text-gray-300 mb-4" size={48} />
+              <p className="text-gray-500 font-medium text-lg mb-2">Không có plan nào phù hợp bộ lọc</p>
+              <p className="text-gray-400 text-sm">Thử thay đổi bộ lọc hoặc tạo plan mới</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filtered.map((plan) => {
+                const baseURL = "http://localhost:8080/";
+                const imageUrl = plan.linkImage 
+                  ? (plan.linkImage.startsWith('http') ? plan.linkImage : `${baseURL}${plan.linkImage}`)
+                  : null;
+                
+                return (
+                  <div
+                    key={plan.id}
+                    className="bg-white rounded-2xl shadow-lg border-2 border-gray-100 hover:border-sky-300 hover:shadow-2xl transition-all duration-300 overflow-hidden group transform hover:-translate-y-1"
+                  >
+                    {/* Goal Image */}
+                    {imageUrl && (
+                      <div className="relative w-full h-48 overflow-hidden bg-gradient-to-br from-sky-100 to-blue-100">
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent z-10" />
+                        <img
+                          src={imageUrl}
+                          alt={plan.goalName || plan.title}
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                        {/* Goal Badge */}
+                        {plan.goalName && (
+                          <div className="absolute top-3 left-3 z-20">
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-white/90 backdrop-blur-sm rounded-full shadow-md">
+                              <Target size={14} className="text-sky-600" />
+                              <span className="text-xs font-bold text-gray-900">{plan.goalName}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    <div className="p-6 space-y-4">
+                      {/* Header */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className="p-3 bg-gradient-to-br from-sky-500 to-sky-600 rounded-xl group-hover:scale-110 transition-transform shadow-md">
+                            <Dumbbell className="text-white" size={22} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-bold text-lg text-gray-900 truncate">{plan.title}</h3>
+                            <p className="text-sm text-gray-600 mt-1 flex items-center gap-1">
+                              <Calendar size={14} />
+                              {plan.createAt}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-semibold text-gray-900">
-                            {plan.title}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            Cập nhật: {plan.createAt}
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setDetailPlan(plan)}
+                            className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 hover:text-blue-700 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-110 border border-blue-200"
+                            title="Xem chi tiết"
+                          >
+                            <Eye size={18} strokeWidth={2.5} />
+                          </button>
+                          <button
+                            onClick={() => openEditModal(plan)}
+                            className="p-2 text-purple-600 bg-purple-50 hover:bg-purple-100 hover:text-purple-700 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-110 border border-purple-200"
+                            title="Chỉnh sửa"
+                          >
+                            <Edit2 size={18} strokeWidth={2.5} />
+                          </button>
+                          <button
+                            onClick={() => setDeleteTarget(plan)}
+                            className="p-2 text-red-600 bg-red-50 hover:bg-red-100 hover:text-red-700 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-110 border border-red-200"
+                            title="Xóa"
+                          >
+                            <Trash2 size={18} strokeWidth={2.5} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Description */}
+                      {plan.description && (
+                        <p className="text-sm text-gray-700 line-clamp-2 font-medium leading-relaxed">{plan.description}</p>
+                      )}
+
+                      {/* Info Grid */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200">
+                          <p className="text-xs text-gray-600 uppercase mb-1 font-bold tracking-wide">Thời lượng</p>
+                          <p className="font-bold text-gray-900">{plan.durationWeeks}</p>
+                        </div>
+                        <div className="p-3 bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200">
+                          <p className="text-xs text-gray-600 uppercase mb-1 font-bold tracking-wide">Subscribers</p>
+                          <p className="font-bold text-gray-900 flex items-center gap-1">
+                            <Users size={14} />
+                            {Number(plan.subscribers).toLocaleString()}
                           </p>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-gray-900">
-                      {plan.durationWeeks} week
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${difficultyColor(
-                          plan.difficultyLevel
-                        )}`}
-                      >
-                        {plan.difficultyLevel}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-gray-900">
-                      {Number(plan.subscribers).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 font-semibold text-gray-900">
-                      ${plan.price}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${
-                          plan.status === "published"
-                            ? "bg-green-100 text-green-700"
-                            : plan.status === "draft"
-                            ? "bg-yellow-50 text-yellow-700"
-                            : "bg-gray-100 text-gray-600"
-                        }`}
-                      >
-                        {plan.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-gray-900">
-                      {plan.focusArea}
-                    </td>
-                    <td className="px-6 py-4 text-right space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setDetailPlan(plan)}
-                      >
-                        Chi tiết
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openEditModal(plan)}
-                      >
-                        Sửa
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-red-600 hover:bg-red-50"
-                        onClick={() => setDeleteTarget(plan)}
-                      >
-                        Xóa
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-                {filtered.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={8}
-                      className="px-6 py-12 text-center text-gray-500"
-                    >
-                      Không có plan nào phù hợp bộ lọc.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+
+                      {/* Difficulty & Status */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className={`px-3 py-1.5 rounded-full text-xs font-bold capitalize shadow-sm ${difficultyColor(
+                            plan.difficultyLevel
+                          )}`}
+                        >
+                          {plan.difficultyLevel}
+                        </span>
+                        <span
+                          className={`px-3 py-1.5 rounded-full text-xs font-bold capitalize shadow-sm ${
+                            plan.status === "published"
+                              ? "bg-gradient-to-r from-green-500 to-green-600 text-white"
+                              : plan.status === "draft"
+                              ? "bg-gradient-to-r from-yellow-500 to-yellow-600 text-white"
+                              : "bg-gradient-to-r from-gray-500 to-gray-600 text-white"
+                          }`}
+                        >
+                          {plan.status}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           <SimpleModal
             isOpen={modalState.open}
@@ -464,28 +544,17 @@ export function TrainingPlansPage() {
                 }
                 placeholder="ví dụ: 30 ngày"
               />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  label="Giá bán (USD)"
-                  type="number"
-                  value={String(form.price)}
-                  onChange={(value) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      price: Number(value) || 0,
-                    }))
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                  Mô tả <span className="text-red-500">*</span>
+                </label>
+                <Textarea
+                  value={form.description || ""}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, description: e.target.value }))
                   }
-                />
-                <FormField
-                  label="Subscribers"
-                  type="number"
-                  value={String(form.subscribers)}
-                  onChange={(value) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      subscribers: Number(value) || 0,
-                    }))
-                  }
+                  className="min-h-[100px] border-gray-300 focus:border-purple-500 focus:ring-purple-500"
+                  placeholder="Mô tả chi tiết về training plan..."
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -561,11 +630,15 @@ export function TrainingPlansPage() {
                   variant="danger"
                   onClick={() => {
                     if (deleteTarget) {
-                      handleDelete(deleteTarget.id);
+                      // Use tpId if available (backend format), otherwise use id
+                      const idToDelete = (deleteTarget as any).tpId || deleteTarget.id;
+                      console.log("🗑️ [TrainingPlansPage] Delete button clicked, ID to delete:", idToDelete, "Full deleteTarget:", deleteTarget);
+                      handleDelete(idToDelete);
                     }
                   }}
+                  disabled={submitLoading}
                 >
-                  Xóa
+                  {submitLoading ? "Đang xóa..." : "Xóa"}
                 </Button>
               </div>
             }
@@ -583,15 +656,15 @@ export function TrainingPlansPage() {
 }
 
 function difficultyColor(level: string) {
-  switch (level) {
+  switch (level.toLowerCase()) {
     case "beginner":
-      return "bg-green-100 text-green-700";
+      return "bg-gradient-to-r from-green-500 to-green-600 text-white";
     case "intermediate":
-      return "bg-yellow-100 text-yellow-700";
+      return "bg-gradient-to-r from-yellow-500 to-yellow-600 text-white";
     case "advanced":
-      return "bg-red-100 text-red-700";
+      return "bg-gradient-to-r from-red-500 to-red-600 text-white";
     default:
-      return "bg-gray-100 text-gray-600";
+      return "bg-gradient-to-r from-gray-500 to-gray-600 text-white";
   }
 }
 

@@ -1,24 +1,50 @@
 import { motion } from 'motion/react';
 import { useState } from 'react';
-import { Search, Filter } from 'lucide-react';
+import { Search, Filter, Loader2, Trophy, Users, Calendar } from 'lucide-react';
 import { ChallengeCard } from '../components/ChallengeCard';
 import { mockChallenges } from '../api/mockData';
 import { useChallenges } from '../../../context/ChallengeContext';
+import { Challenge } from '../types/challenge.types';
+
 export const Challenges = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDifficulty, setFilterDifficulty] = useState<string>('All');
   const [filterStatus, setFilterStatus] = useState<string>('All');
-  const { challenges , loading, error} = useChallenges();
+  const { challenges, loading, error } = useChallenges();
 
-
-  const filteredChallenges = challenges.filter((challenge: any) => {
+  const filteredChallenges = challenges.filter((challenge: Challenge) => {
     const matchesSearch = challenge.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       challenge.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDifficulty = filterDifficulty === 'All' || challenge.difficulty === filterDifficulty;
     const matchesStatus = filterStatus === 'All' || challenge.status === filterStatus;
-    
+
     return matchesSearch && matchesDifficulty && matchesStatus;
   });
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-sky-500 mx-auto mb-4" />
+          <p className="text-gray-600">Loading challenges...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-500 mb-4">
+            <Trophy className="w-12 h-12 mx-auto" />
+          </div>
+          <h2 className="text-xl text-gray-900 mb-2">Failed to load challenges</h2>
+          <p className="text-gray-600">Please try again later.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">

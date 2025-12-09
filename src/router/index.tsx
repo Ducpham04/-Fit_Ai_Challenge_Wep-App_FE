@@ -7,10 +7,15 @@ import { ChallengeDetail } from "../features/challenges/pages/ChallengeDetail";
 import { Leaderboard } from "../features/leaderboard/pages/Leaderboard";
 import { Community } from "../features/community/pages/Community";
 import { Profile } from "../features/profile/pages/Profile";
-import { Login } from "../features/auth/pages/Login";
+import { BodyRecordPage } from "../features/profile/pages/BodyRecordPage";
+import { BodyProgressPage } from "../features/profile/pages/BodyProgressPage";
+import { BodyProfilePage } from "../features/profile/pages/BodyProfilePage";
+import { HealthProfilePage } from "../features/profile/pages/HealthProfilePage";
+import { LoginEnhanced } from "../features/auth/pages/LoginEnhanced";
 import { Register } from "../features/auth/pages/Register";
 import { Settings } from "../features/settings/pages/Settings";
 import { PushUpCounter } from "../features/challenges/pages/PushUpCounter";
+import { MyChallengePage } from "../features/myChallenge/pages/MyChallengePage";
 import { AdminDashboard } from "../features/admin/AdminDashboard";
 import { UserPage } from "../features/admin/pages/UserPage";
 import { DashboardPage } from "../features/admin/pages/DashboardPage";
@@ -27,13 +32,16 @@ import { AILogsPage } from "../features/admin/pages/AILogsPage";
 import { NotificationsPage } from "../features/admin/pages/NotificationsPage";
 import { SystemSettingsPage } from "../features/admin/pages/SystemSettingsPage";
 import { HashRouter } from "react-router-dom";
+import { BodyInfoPage } from "../features/onboarding/pages/BodyInfoPage";
+import { RecommendedPlanPage } from "../features/onboarding/pages/RecommendedPlanPage";
+import { FitnessAIDemo } from "../components/fitnessAI/FitnessAIDemo";
 
 export const AppRouter = () => {
   return (
     <HashRouter>
       <Routes>
         {/* Auth */}
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<LoginEnhanced />} />
         <Route path="/register" element={<Register />} />
 
         {/* Admin nested routes */}
@@ -53,18 +61,29 @@ export const AppRouter = () => {
           <Route path="ai-logs" element={<AILogsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
           <Route path="settings" element={<SystemSettingsPage />} />
+          <Route path="fitness-ai-demo" element={<FitnessAIDemo />} />
         </Route>
+
+        {/* Onboarding - No Layout */}
+        <Route path="/onboarding/body-info" element={<BodyInfoPage />} />
+        <Route path="/onboarding/recommended" element={<RecommendedPlanPage />} />
 
         {/* Main App */}
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Home />} />
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="my-challenge" element={<MyChallengePage />} />
+          
           <Route path="challenges" element={<Challenges />} />
           <Route path="challenges/:id" element={<ChallengeDetail />} />
           <Route path="challenges/:id/counter" element={<PushUpCounter />} />
           <Route path="leaderboard" element={<Leaderboard />} />
           <Route path="community" element={<Community />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="profile/body-record" element={<BodyRecordPage />} />
+          <Route path="profile/body-progress" element={<BodyProgressPage />} />
+          <Route path="profile/body-profile" element={<BodyProfilePage />} />
+          <Route path="profile/health-profile" element={<HealthProfilePage />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

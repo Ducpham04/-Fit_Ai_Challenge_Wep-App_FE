@@ -8,6 +8,8 @@ export interface AdminChallenge {
   status: string;
   difficult: string;
   videoFile: File | null;
+  goalId?: number;
+  exerciseType?: string; // AI model/exercise type: push-up, squat, pull-up, sit-up, plank
 }
 
 export type ChallengePayload = Omit<AdminChallenge, "id">;
@@ -115,10 +117,12 @@ export interface AdminTrainingPlan {
   durationWeeks: string;
   difficultyLevel: TrainingDifficulty;
   subscribers: number;
+  description: string;
   price: number;
   status: TrainingPlanStatus;
   goalId : number ;
   goalName : string ;
+  linkImage?: string; // Goal image from backend
   focusArea: string;
   createAt: string;
 }
@@ -174,9 +178,19 @@ export interface AdminGoal {
   endDate: string;
   progress: number;
   createdAt: string;
+  // BE response fields
+  name?: string;
+  imageLink?: string;
 }
 
-export type GoalPayload = Omit<AdminGoal, "id" | "createdAt" | "progress">;
+// Form payload for create/update - matches BE goalsDTOpayload
+export interface GoalPayload {
+  name: string;
+  description: string;
+  imageLink?: string;
+  imageFile?: File | null;
+}
+
 
 
 
