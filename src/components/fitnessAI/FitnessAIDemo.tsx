@@ -332,6 +332,7 @@ export const FitnessAIDemo: React.FC = () => {
 
             {/* Angles */}
             {Object.keys(activeAPI.metrics.angles).length > 0 && (
+              
               <div className="mt-4">
                 <p className="text-sm font-semibold text-gray-700 mb-2">Angles:</p>
                 <div className="grid grid-cols-2 gap-2">

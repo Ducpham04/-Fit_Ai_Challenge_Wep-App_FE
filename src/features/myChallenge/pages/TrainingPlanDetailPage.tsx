@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getTrainingPlanDetail, submitChallengeVideo, updateChallengeStatus, getPersonalizedDayDetails, completeChallenge, saveDailyTrainingLog, regeneratePersonalizedPlanDetails } from '../api/myChallengeService';
+import { getTrainingPlanDetail, updateChallengeStatus, getPersonalizedDayDetails, completeChallenge, saveDailyTrainingLog, regeneratePersonalizedPlanDetails } from '../api/myChallengeService';
 import { TrainingPlanDetail, Challenge } from '../types/myChallenge.type';
 import { TrainingPlanHeader } from '../components/TrainingPlanHeader';
 import { DayTabs } from '../components/DayTabs';
 import { ChallengeCard } from '../components/ChallengeCard';
-import { ChallengeDetailModal } from '../components/ChallengeDetailModal';
-import { AIAnalysisResult } from '../components/AIRepCounter';
-import { ExerciseType, videoFrameToBase64 } from '@/api/fitnessAI.api';
+import { ChallengeDetailExpanded } from '../components/ChallengeDetailExpanded';
 
 interface TrainingPlanDetailPageProps {
   trainingPlanId: string | number;
@@ -28,10 +26,8 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState(1);
   const [selectedChallenge, setSelectedChallenge] = useState<Challenge | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const [expandedChallengeId, setExpandedChallengeId] = useState<number | null>(null); // Track expanded challenge
   const [personalizedData, setPersonalizedData] = useState<Map<number, any>>(new Map());
-  const [isCompletingChallenge, setIsCompletingChallenge] = useState(false);
   
   // Refs để tránh infinite loop
   const planLoadedRef = useRef(false);
@@ -255,332 +251,28 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
     console.log('Challenge Selected:', challenge);
     console.log('Challenge ID:', challenge.id);
     console.log('Challenge ID (goalId):', challenge.challengeId);
-    setSelectedChallenge(challenge);
-    setIsModalOpen(true);
+    // Toggle expand/collapse instead of opening modal
+    if (expandedChallengeId === challenge.id || expandedChallengeId === challenge.challengeId) {
+      setExpandedChallengeId(null);
+      setSelectedChallenge(null);
+    } else {
+      setExpandedChallengeId(challenge.id || challenge.challengeId);
+      setSelectedChallenge(challenge);
+    }
   };
 
   const handleChallengeUpload = (challenge: Challenge) => {
-    setSelectedChallenge(challenge);
-    setIsModalOpen(true);
-  };
-
-  // ✅ Helper function để analyze video file và trả về kết quả
-  const analyzeVideoFile = async (
-    file: File,
-    challenge: Challenge,
-    exerciseType?: string
-  ): Promise<AIAnalysisResult> => {
-    return new Promise((resolve, reject) => {
-      // Map exerciseType từ challenge
-      const mapExerciseType = (exerciseType?: string): ExerciseType => {
-        if (!exerciseType) return 'push-up';
-        const type = exerciseType.toLowerCase();
-        if (type.includes('push') || type.includes('push-up')) return 'push-up';
-        if (type.includes('squat')) return 'squat';
-        if (type.includes('pull') || type.includes('pull-up')) return 'pull-up';
-        if (type.includes('sit') || type.includes('sit-up')) return 'sit-up';
-        if (type.includes('plank')) return 'plank';
-        return 'push-up';
-      };
-
-      const pythonExerciseType = mapExerciseType(exerciseType);
-      const targetTotalReps = challenge.reps * challenge.sets;
-
-      // Tạo video element ẩn để analyze
-      const video = document.createElement('video');
-      video.preload = 'auto';
-      video.muted = true;
-      video.playsInline = true;
-      video.style.display = 'none';
-      document.body.appendChild(video);
-
-      // WebSocket để analyze
-      let wsMetrics: any = null;
-      let wsConnected = false;
-      let wsError: string | null = null;
-      let intervalId: NodeJS.Timeout | null = null;
-      let ws: WebSocket | null = null;
-
-      const FITNESS_AI_WS_URL = import.meta.env.VITE_FITNESS_AI_WS_URL || 'ws://localhost:8000';
-      const wsUrl = `${FITNESS_AI_WS_URL}/ws/exercise/${pythonExerciseType}`;
-
-      // Connect WebSocket
-      try {
-        ws = new WebSocket(wsUrl);
-        
-        ws.onopen = () => {
-          console.log('✅ [analyzeVideoFile] WebSocket connected');
-          wsConnected = true;
-        };
-
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.success && data.data && typeof data.data.reps === 'number') {
-              wsMetrics = data.data;
-            }
-          } catch (err) {
-            console.error('Error parsing WebSocket message:', err);
-          }
-        };
-
-        ws.onerror = () => {
-          wsError = 'WebSocket connection error';
-        };
-
-        ws.onclose = () => {
-          wsConnected = false;
-        };
-      } catch (err) {
-        console.error('Failed to create WebSocket:', err);
-        wsError = 'Failed to connect to AI service';
-      }
-
-      // Load video
-      const videoUrl = URL.createObjectURL(file);
-      video.src = videoUrl;
-
-      const cleanup = () => {
-        if (intervalId) clearInterval(intervalId);
-        if (ws) ws.close();
-        if (video && video.parentNode) {
-          video.pause();
-          video.src = '';
-          document.body.removeChild(video);
-        }
-        URL.revokeObjectURL(videoUrl);
-      };
-
-      video.onloadedmetadata = () => {
-        console.log('✅ [analyzeVideoFile] Video loaded, starting analysis...');
-        
-        // Wait for WebSocket connection
-        const waitForConnection = setInterval(() => {
-          if (wsConnected || wsError) {
-            clearInterval(waitForConnection);
-            
-            if (wsError) {
-              cleanup();
-              reject(new Error(wsError));
-              return;
-            }
-
-            // Start playing video
-            video.play().catch(err => {
-              console.error('Error playing video:', err);
-              cleanup();
-              reject(new Error('Failed to play video'));
-            });
-          }
-        }, 100);
-
-        // Send frames while playing
-        intervalId = setInterval(() => {
-          if (ws && ws.readyState === WebSocket.OPEN && !video.paused && video.readyState >= 2) {
-            try {
-              const base64Image = videoFrameToBase64(video);
-              const base64Data = base64Image.split(',')[1];
-              ws.send(JSON.stringify({
-                frame: base64Data,
-                timestamp: Date.now() / 1000,
-                exercise_type: pythonExerciseType,
-              }));
-            } catch (err) {
-              console.error('Error sending frame:', err);
-            }
-          }
-        }, 100); // 10 FPS
-      };
-
-      // Khi video kết thúc, process analysis
-      video.onended = () => {
-        console.log('✅ [analyzeVideoFile] Video ended, processing results...');
-        
-        // Wait a bit for final metrics
-        setTimeout(() => {
-          if (!wsMetrics || typeof wsMetrics.reps !== 'number' || wsMetrics.reps <= 0) {
-            cleanup();
-            reject(new Error('No analysis results received'));
-            return;
-          }
-
-          const correctReps = wsMetrics.reps;
-          const isPassed = correctReps >= targetTotalReps;
-          const qualityScore = typeof wsMetrics.quality_score === 'number' ? wsMetrics.quality_score : 0;
-          
-          const formErrors = Array.isArray(wsMetrics.form_errors) ? wsMetrics.form_errors : [];
-          const formErrorsText = formErrors.length > 0
-            ? formErrors.map((e: any) => e && e.message ? e.message : 'Form issue detected').join('. ')
-            : 'Good form maintained throughout.';
-          
-          const feedback = isPassed
-            ? `Excellent! You completed ${correctReps} reps with ${qualityScore}% quality score. ${formErrorsText}`
-            : `You completed ${correctReps} reps. Need ${targetTotalReps - correctReps} more to reach the target. ${formErrorsText}`;
-          
-          const is_valid_form = typeof wsMetrics.is_valid_form === 'boolean' 
-            ? wsMetrics.is_valid_form 
-            : qualityScore >= 60;
-
-          const analysis: AIAnalysisResult = {
-            correctReps,
-            totalReps: correctReps,
-            accuracy: qualityScore / 100,
-            feedback,
-            posture: qualityScore >= 80 ? 'Excellent' : qualityScore >= 60 ? 'Good' : 'Fair',
-            formScore: qualityScore / 100,
-            isPassed,
-            videoUrl: videoUrl,
-            confidence: is_valid_form ? 0.95 : 0.75,
-            processingTime: 0,
-          };
-
-          cleanup();
-          resolve(analysis);
-        }, 1000);
-      };
-
-      video.onerror = () => {
-        cleanup();
-        reject(new Error('Failed to load video'));
-      };
-    });
-  };
-
-  // ✅ Function để handle video upload và tự động analyze
-  const handleVideoUploadAndAnalyze = async (challenge: Challenge, file: File) => {
-    console.log('🔵 [TrainingPlanDetailPage] ========== handleVideoUploadAndAnalyze ==========');
-    console.log('🔵 [TrainingPlanDetailPage] Starting video analysis:', {
-      challengeId: challenge.challengeId,
-      challengeName: challenge.challengeName,
-      fileName: file.name,
-      exerciseType: challenge.exerciseType,
-    });
-
-    try {
-      // Analyze video
-      const analysis = await analyzeVideoFile(file, challenge, challenge.exerciseType);
-      console.log('✅ [TrainingPlanDetailPage] Video analysis complete:', {
-        correctReps: analysis.correctReps,
-        isPassed: analysis.isPassed,
-        accuracy: analysis.accuracy,
-      });
-
-      // Update UI với analysis results
-      if (!plan) {
-        console.warn('⚠️ [TrainingPlanDetailPage] Plan is null, cannot update');
-        return;
-      }
-
-      const targetTotalReps = challenge.reps * challenge.sets;
-      const isPassed = analysis.correctReps >= targetTotalReps;
-
-      const updatedPlan = { ...plan };
-      updatedPlan.dayChallenges = updatedPlan.dayChallenges.map((day: any) => ({
-        ...day,
-        challenges: day.challenges.map((ch: any) => {
-          if (ch.id === challenge.id || ch.challengeId === challenge.challengeId) {
-            return {
-              ...ch,
-              status: isPassed ? 'COMPLETED' : ch.status,
-              aiAnalysis: {
-                correctReps: analysis.correctReps,
-                totalReps: analysis.totalReps,
-                accuracy: Math.round(analysis.accuracy * 100),
-                feedback: analysis.feedback,
-                posture: analysis.posture,
-              },
-              videoUrl: analysis.videoUrl || ch.videoUrl,
-            };
-          }
-          return ch;
-        }),
-      }));
-
-      setPlan(updatedPlan);
-
-      // ✅ Nếu passed, gọi handleCompleteChallenge để lưu DailyTrainingLog
-      if (isPassed) {
-        console.log('🎉 [TrainingPlanDetailPage] Challenge PASSED - Calling handleCompleteChallenge...');
-        try {
-          await handleCompleteChallenge(challenge.challengeId, undefined, analysis);
-          console.log('✅ [TrainingPlanDetailPage] handleCompleteChallenge completed');
-        } catch (error) {
-          console.error('❌ [TrainingPlanDetailPage] Error calling handleCompleteChallenge:', error);
-        }
-      }
-    } catch (error) {
-      console.error('❌ [TrainingPlanDetailPage] Error analyzing video:', error);
-      setError(error instanceof Error ? error.message : 'Failed to analyze video. Please try again.');
-      throw error;
-    }
-  };
-
-  const handleVideoUpload = async (file: File) => {
-    if (!plan || !selectedChallenge) return;
-
-    try {
-      setIsUploading(true);
-      console.log('📤 [MOCK] Video upload (no backend API call):');
-      console.log('  Plan ID:', plan.id);
-      console.log('  Challenge ID:', selectedChallenge.challengeId);
-      console.log('  File:', file.name);
-      
-      // ⚠️ MOCK MODE: Không gọi API, chỉ update UI
-      // const result = await submitChallengeVideo(...); // Commented out
-      
-      // Mock AI analysis result
-      const mockAnalysis = {
-        correctReps: selectedChallenge.reps * selectedChallenge.sets,
-        totalReps: selectedChallenge.reps * selectedChallenge.sets + 2,
-        accuracy: 0.92,
-        feedback: 'Excellent form! Keep your back straight and maintain consistent pace.',
-        posture: 'Excellent',
-      };
-      
-      // Update challenge with AI analysis results (local state only)
-      const updatedPlan = { ...plan };
-      updatedPlan.dayChallenges = updatedPlan.dayChallenges.map((day) => ({
-        ...day,
-        challenges: day.challenges.map((ch) =>
-          ch.id === selectedChallenge.id
-            ? {
-                ...ch,
-                status: 'COMPLETED' as const,
-                aiAnalysis: mockAnalysis,
-              }
-            : ch
-        ),
-      }));
-      setPlan(updatedPlan);
-
-      // Recalculate progress
-      const completedCount = updatedPlan.dayChallenges.reduce(
-        (sum, day) => sum + day.challenges.filter(c => c.status === 'COMPLETED').length,
-        0
-      );
-      const totalChallenges = updatedPlan.dayChallenges.reduce(
-        (sum, day) => sum + day.challenges.length,
-        0
-      );
-      updatedPlan.progressPercentage = Math.round((completedCount / totalChallenges) * 100);
-      setPlan(updatedPlan);
-
-      console.log('✅ [MOCK] Challenge updated locally:', {
-        challengeId: selectedChallenge.challengeId,
-        status: 'COMPLETED',
-        progress: updatedPlan.progressPercentage + '%',
-      });
-
-      // Close modal
-      setIsModalOpen(false);
+    // Toggle expand/collapse instead of opening modal
+    if (expandedChallengeId === challenge.id || expandedChallengeId === challenge.challengeId) {
+      setExpandedChallengeId(null);
       setSelectedChallenge(null);
-    } catch (error) {
-      console.error('Error in video upload handler:', error);
-      setError('Failed to process video. Please try again.');
-    } finally {
-      setIsUploading(false);
+    } else {
+      setExpandedChallengeId(challenge.id || challenge.challengeId);
+      setSelectedChallenge(challenge);
     }
   };
+
+  // REMOVED: All video analysis functionality - no longer needed
 
   const handleCompleteChallenge = async (challengeId: number, userChallengeId?: number, analysisData?: any) => {
     console.log('🎯 [TrainingPlanDetailPage] ========== handleCompleteChallenge CALLED ==========');
@@ -588,22 +280,10 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
       challengeId,
       userChallengeId,
       trainingPlanId,
-      isCompletingChallenge,
       hasAnalysisData: !!analysisData,
       analysisDataKeys: analysisData ? Object.keys(analysisData) : [],
+      analysisDataFull: analysisData ? JSON.stringify(analysisData, null, 2) : null,
     });
-
-    // Prevent multiple simultaneous calls
-    if (isCompletingChallenge) {
-      console.warn('⚠️ [TrainingPlanDetailPage] Challenge completion already in progress, skipping duplicate call');
-      console.warn('⚠️ [TrainingPlanDetailPage] Current isCompletingChallenge state:', isCompletingChallenge);
-      return;
-    }
-    
-    console.log('✅ [TrainingPlanDetailPage] isCompletingChallenge check passed, proceeding...');
-
-    console.log('🔄 [TrainingPlanDetailPage] Setting isCompletingChallenge = true');
-    setIsCompletingChallenge(true);
     try {
       console.log('🎯 [TrainingPlanDetailPage] Marking challenge as completed:', {
         challengeId,
@@ -618,42 +298,78 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
         throw new Error(`Invalid trainingPlanId: ${trainingPlanId}`);
       }
 
-      // Step 1: Update UI optimistically first (for better UX)
-      console.log('📝 [TrainingPlanDetailPage] Step 1: Updating UI optimistically...');
-      if (plan && selectedChallenge) {
-        console.log('📝 [TrainingPlanDetailPage] Plan and selectedChallenge exist, updating...');
-        const updatedPlan = { ...plan };
-        updatedPlan.dayChallenges = updatedPlan.dayChallenges.map((day) => ({
-          ...day,
-          challenges: day.challenges.map((ch) =>
-            ch.id === selectedChallenge.id || ch.challengeId === challengeId
-              ? {
-                  ...ch,
-                  status: 'COMPLETED' as const,
-                }
-              : ch
-          ),
-        }));
-
-        // Recalculate progress
-        const completedCount = updatedPlan.dayChallenges.reduce(
-          (sum, day) => sum + day.challenges.filter(c => c.status === 'COMPLETED').length,
-          0
-        );
-        const totalChallenges = updatedPlan.dayChallenges.reduce(
-          (sum, day) => sum + day.challenges.length,
-          0
-        );
-        updatedPlan.progressPercentage = Math.round((completedCount / totalChallenges) * 100);
+      // Step 1: Update UI optimistically first (for better UX) - ✅ FIX: Update với aiAnalysis
+      console.log('📝 [TrainingPlanDetailPage] Step 1: Updating UI optimistically with aiAnalysis...');
+      if (plan) {
+        console.log('📝 [TrainingPlanDetailPage] Plan exists, updating...');
         
-        console.log('🔄 [TrainingPlanDetailPage] Calling setPlan with updated plan...');
-        setPlan(updatedPlan);
-        console.log('✅ [TrainingPlanDetailPage] Challenge marked as completed (UI updated optimistically)');
+        // Tìm challenge trong plan (có thể từ selectedChallenge hoặc tìm theo challengeId)
+        const challengeToUpdate = selectedChallenge || 
+          plan.dayChallenges
+            .flatMap(day => day.challenges)
+            .find(ch => ch.challengeId === challengeId || ch.id === challengeId);
+        
+        if (challengeToUpdate) {
+          const updatedPlan = { ...plan };
+          updatedPlan.dayChallenges = updatedPlan.dayChallenges.map((day) => ({
+            ...day,
+            challenges: day.challenges.map((ch) => {
+              if (ch.id === challengeToUpdate.id || ch.challengeId === challengeId) {
+                // ✅ FIX: Update với aiAnalysis từ analysisData
+                const isPassed = analysisData?.isPassed || 
+                  (analysisData?.correctReps && analysisData?.correctReps >= (ch.reps * ch.sets));
+                
+                const updatedChallenge = {
+                  ...ch,
+                  status: isPassed ? 'COMPLETED' as const : ch.status,
+                  // ✅ FIX: Thêm aiAnalysis nếu có trong analysisData
+                  aiAnalysis: analysisData ? {
+                    correctReps: analysisData.correctReps || analysisData.repsCompleted || 0,
+                    totalReps: analysisData.totalReps || analysisData.repsCompleted || ch.reps * ch.sets,
+                    accuracy: typeof analysisData.accuracy === 'number' 
+                      ? (analysisData.accuracy <= 1 ? Math.round(analysisData.accuracy * 100) : analysisData.accuracy)
+                      : (analysisData.score || 0),
+                    feedback: analysisData.feedback || 'Analysis completed',
+                    posture: analysisData.posture || 'Good',
+                  } : ch.aiAnalysis,
+                };
+                
+                console.log('✅ [TrainingPlanDetailPage] Updated challenge with aiAnalysis:', {
+                  challengeId: updatedChallenge.challengeId,
+                  challengeName: updatedChallenge.challengeName,
+                  aiAnalysis: updatedChallenge.aiAnalysis,
+                  status: updatedChallenge.status,
+                });
+                
+                return updatedChallenge;
+              }
+              return ch;
+            }),
+          }));
+
+          // Recalculate progress
+          const completedCount = updatedPlan.dayChallenges.reduce(
+            (sum, day) => sum + day.challenges.filter(c => c.status === 'COMPLETED').length,
+            0
+          );
+          const totalChallenges = updatedPlan.dayChallenges.reduce(
+            (sum, day) => sum + day.challenges.length,
+            0
+          );
+          updatedPlan.progressPercentage = Math.round((completedCount / totalChallenges) * 100);
+          
+          console.log('🔄 [TrainingPlanDetailPage] Calling setPlan with updated plan...');
+          setPlan(updatedPlan);
+          console.log('✅ [TrainingPlanDetailPage] Challenge state updated with aiAnalysis (UI updated optimistically)');
+        } else {
+          console.warn('⚠️ [TrainingPlanDetailPage] Challenge not found in plan:', {
+            challengeId,
+            hasPlan: !!plan,
+            hasSelectedChallenge: !!selectedChallenge,
+          });
+        }
       } else {
-        console.warn('⚠️ [TrainingPlanDetailPage] Plan or selectedChallenge missing:', {
-          hasPlan: !!plan,
-          hasSelectedChallenge: !!selectedChallenge,
-        });
+        console.warn('⚠️ [TrainingPlanDetailPage] Plan is missing');
       }
 
       // Step 2: Update challenge status in training plan context
@@ -775,8 +491,22 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
           const data = await getTrainingPlanDetail(numId);
           if (data && data.dayChallenges.length > 0) {
             console.log('✅ [TrainingPlanDetailPage] Training plan data received, updating state...');
+            
+            // ✅ FIX: Merge với personalized data nếu có
+            if (utId && selectedDay) {
+              const key = `${utId}-${selectedDay}`;
+              personalizedDataLoadedRef.current.delete(key); // Force reload personalized data
+            }
+            
             setPlan(data);
             console.log('✅ [TrainingPlanDetailPage] Training plan reloaded from backend');
+            
+            // ✅ FIX: Reload personalized data để có aiAnalysis đầy đủ
+            if (utId && selectedDay) {
+              setTimeout(() => {
+                loadPersonalizedData(utId, selectedDay);
+              }, 500);
+            }
           } else {
             console.warn('⚠️ [TrainingPlanDetailPage] No data or empty dayChallenges:', data);
           }
@@ -799,8 +529,7 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
         console.error('❌ [TrainingPlanDetailPage] Could not reload training plan after error:', reloadError);
       }
     } finally {
-      console.log('🏁 [TrainingPlanDetailPage] Finally block - resetting isCompletingChallenge flag');
-      setIsCompletingChallenge(false);
+      console.log('🏁 [TrainingPlanDetailPage] Finally block');
     }
   };
 
@@ -927,16 +656,26 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
                   {currentDayData.challenges.length} Challenge{currentDayData.challenges.length !== 1 ? 's' : ''}
                 </span>
               </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {currentDayData.challenges.map((challenge) => (
-                  <ChallengeCard
-                    key={challenge.id}
-                    challenge={challenge}
-                    onStartClick={handleChallengeStart}
-                    onUploadClick={handleChallengeUpload}
-                    trainingPlanId={trainingPlanId}
-                    onVideoUpload={handleVideoUploadAndAnalyze} // ✅ Tự động analyze khi upload
-                    onAnalysisComplete={async (challenge, analysis) => {
+              <div className="flex flex-col gap-4">
+                {currentDayData.challenges.map((challenge) => {
+                  const isExpanded = expandedChallengeId === challenge.id || expandedChallengeId === challenge.challengeId;
+                  return (
+                    <ChallengeCard
+                      key={challenge.id}
+                      challenge={challenge}
+                      onStartClick={handleChallengeStart}
+                      trainingPlanId={trainingPlanId}
+                      isExpanded={isExpanded}
+                      expandedContent={isExpanded && selectedChallenge && selectedChallenge.id === challenge.id ? (
+                        <ChallengeDetailExpanded
+                          challenge={selectedChallenge}
+                          onCollapse={() => {
+                            setExpandedChallengeId(null);
+                            setSelectedChallenge(null);
+                          }}
+                        />
+                      ) : null}
+                      onAnalysisComplete={async (challenge, analysis) => {
                       console.log('🔵 [TrainingPlanDetailPage] ========== FLOW 1: onAnalysisComplete from ChallengeCard ==========');
                       console.log('🔵 [TrainingPlanDetailPage] Received analysis from ChallengeCard:', {
                         challengeId: challenge.challengeId,
@@ -997,17 +736,19 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
                         } catch (error) {
                           console.error('❌ [TrainingPlanDetailPage] Flow 1: Error calling handleCompleteChallenge:', error);
                         }
-                      }
-                    }}
-                  />
-                ))}
+                    }
+                  }}
+                />
+                  );
+                })}
               </div>
             </div>
           )}
         </>
       )}
 
-      {selectedChallenge && (
+      {/* Modal removed - using inline expansion instead */}
+      {/* {selectedChallenge && (
         <ChallengeDetailModal
           challenge={selectedChallenge}
           isOpen={isModalOpen}
@@ -1020,7 +761,7 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
           isLoading={isUploading}
           trainingPlanId={trainingPlanId}
         />
-      )}
+      )} */}
       </div>
     </main>
   );

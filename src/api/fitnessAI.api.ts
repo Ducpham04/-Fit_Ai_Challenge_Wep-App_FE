@@ -110,16 +110,35 @@ export const resetCounter = async (exerciseType?: ExerciseType): Promise<{ succe
 
 /**
  * Convert video frame to base64
+ * Handles CORS errors for videos from different origins
  */
 export const videoFrameToBase64 = (video: HTMLVideoElement): string => {
-  const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Could not get canvas context');
-  
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/jpeg', 0.8);
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Could not get canvas context');
+    
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    try {
+      return canvas.toDataURL('image/jpeg', 0.8);
+    } catch (corsError: any) {
+      // If CORS error, try to get image data and convert manually
+      if (corsError.name === 'SecurityError' || corsError.message.includes('Tainted')) {
+        console.warn('⚠️ [videoFrameToBase64] CORS error, trying alternative method');
+        
+        // Alternative: Use ImageData and convert to base64 manually
+        // This won't work for tainted canvas either, but we can at least log the error
+        throw new Error('Canvas is tainted due to CORS. Please ensure video has proper CORS headers or is from same origin.');
+      }
+      throw corsError;
+    }
+  } catch (error: any) {
+    console.error('❌ [videoFrameToBase64] Error:', error);
+    throw error;
+  }
 };
 
 /**
@@ -155,5 +174,7 @@ export const extractFrameFromVideo = async (videoFile: File, timeInSeconds: numb
 };
 
 export default fitnessAIClient;
+
+
 
 

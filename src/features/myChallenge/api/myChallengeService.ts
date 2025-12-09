@@ -18,6 +18,43 @@ const transformDailyTrainingLogDTO = (dto: DailyTrainingLogDTO): Challenge => {
     status = 'not_started';
   }
 
+  // ✅ FIX: Map aiAnalysis từ DailyTrainingLogDTO nếu có dữ liệu
+  // Sử dụng score, confidence, repsCompleted, setsCompleted để tạo aiAnalysis object
+  let aiAnalysis: Challenge['aiAnalysis'] | undefined = undefined;
+  if (dto.status === 'completed' && (dto.repsCompleted !== undefined || dto.score !== undefined)) {
+    const correctReps = dto.repsCompleted || 0;
+    const totalReps = dto.repsCompleted || dto.targetReps || 0;
+    const accuracy = dto.score !== undefined ? dto.score : (dto.confidence ? Math.round(dto.confidence * 100) : 0);
+    
+    // Tạo feedback dựa trên score và reps
+    let feedback = 'Good job completing the challenge!';
+    if (accuracy >= 80) {
+      feedback = 'Excellent form and execution! Keep up the great work.';
+    } else if (accuracy >= 60) {
+      feedback = 'Good effort! Focus on maintaining proper form throughout.';
+    } else {
+      feedback = 'Keep practicing to improve your form and technique.';
+    }
+    
+    // Xác định posture dựa trên score
+    let posture = 'Good';
+    if (accuracy >= 80) {
+      posture = 'Excellent';
+    } else if (accuracy >= 60) {
+      posture = 'Good';
+    } else {
+      posture = 'Fair';
+    }
+    
+    aiAnalysis = {
+      correctReps: correctReps,
+      totalReps: totalReps,
+      accuracy: accuracy, // score từ backend (0-100)
+      feedback: feedback,
+      posture: posture,
+    };
+  }
+
   return {
     id: dto.dtlId || dto.challengeId, // Use dtlId if exists, otherwise challengeId
     challengeId: dto.challengeId,
@@ -37,6 +74,8 @@ const transformDailyTrainingLogDTO = (dto: DailyTrainingLogDTO): Challenge => {
     caloriesBurned: dto.caloriesBurned,
     score: dto.score,
     confidence: dto.confidence,
+    // ✅ FIX: Thêm aiAnalysis để hiển thị kết quả trong ChallengeCard
+    aiAnalysis: aiAnalysis,
   };
 };
 
@@ -295,7 +334,7 @@ export const getTrainingPlanDetail = async (trainingPlanId: number): Promise<Tra
       const firstLog = dailyLogs[0];
       
       return {
-        id: trainingPlanId.toString(),
+        id: trainingPlanId,
         planName: firstLog.trainingPlanTitle,
         description: 'Training Plan Description',
         duration: `${totalDays} days`,
@@ -334,7 +373,7 @@ export const getTrainingPlanDetail = async (trainingPlanId: number): Promise<Tra
         
         // Return empty plan structure
         return {
-          id: trainingPlanId.toString(),
+          id: trainingPlanId,
           planName: planData?.title || 'Training Plan',
           description: planData?.description || 'No description available',
           duration: `${planData?.duration || 0} days`,
@@ -344,7 +383,7 @@ export const getTrainingPlanDetail = async (trainingPlanId: number): Promise<Tra
           totalDays: 0,
           progressPercentage: 0,
           dayChallenges: [],
-          userId: '',
+          userId: 0,
           status: 'active',
         };
       } catch (fallbackError) {
@@ -374,7 +413,7 @@ export const getTrainingPlanDetail = async (trainingPlanId: number): Promise<Tra
     };
 
     const trainingPlanDetail: TrainingPlanDetail = {
-      id: firstDto.trainingPlanId.toString(),
+      id: firstDto.trainingPlanId,
       planName: firstDto.trainingPlanTitle,
       description: 'Training Plan Description',
       duration: `${totalDays} days`,
@@ -384,7 +423,7 @@ export const getTrainingPlanDetail = async (trainingPlanId: number): Promise<Tra
       totalDays,
       progressPercentage,
       dayChallenges,
-      userId: '',
+      userId: 0,
       status: 'active',
     };
 

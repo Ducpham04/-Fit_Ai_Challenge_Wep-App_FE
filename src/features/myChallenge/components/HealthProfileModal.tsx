@@ -218,13 +218,13 @@ export const HealthProfileModal: React.FC<HealthProfileModalProps> = ({
   const handleStartPlan = async (planId: number) => {
     try {
       setLoading(true);
-      const apiResponse = await TrainingAPI.startTrainingPlan(planId);
+      const response = await TrainingAPI.startTrainingPlan(planId);
       
       // Axios wraps response in .data, and backend returns NotificationResponse
       // So structure is: apiResponse.data.success, apiResponse.data.data
-      const response = apiResponse.data || apiResponse;
+      
       console.log(response)
-      if (response.success && response.data) {
+      if (response && response.data) {
         const planData = response.data;
         
         // Tìm plan title từ recommended plans

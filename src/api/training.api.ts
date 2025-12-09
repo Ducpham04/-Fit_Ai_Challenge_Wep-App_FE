@@ -1,5 +1,5 @@
 import client from "./client";
-import { TrainingPlanDto, Exercise, DayPlan } from '../dto/training/training.dto';
+import { TrainingPlanDto, Exercise, DayPlan } from '../../dto/training/training.dto';
 
 export const TrainingAPI = {
   /**

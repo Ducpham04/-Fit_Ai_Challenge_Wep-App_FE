@@ -48,14 +48,6 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [processingTime, setProcessingTime] = useState(0);
   
-  // ✅ ĐỒNG BỘ: Load video từ challenge nếu có
-  useEffect(() => {
-    if (initialVideoUrl && initialVideoUrl !== preview) {
-      console.log('🔵 [AIRepCounter] Loading initial video from challenge:', initialVideoUrl);
-      setPreview(initialVideoUrl);
-    }
-  }, [initialVideoUrl, preview]);
-  
   // Map exerciseType from challenge to Python AI exercise type
   const mapExerciseType = (exerciseType?: string): ExerciseType => {
     if (!exerciseType) return 'push-up';
@@ -80,6 +72,66 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
     sendFrame: sendFrameToPython,
     reset: resetPythonAI,
   } = useFitnessAIWebSocket();
+  
+  // ✅ ĐỒNG BỘ: Load video từ challenge nếu có và tự động play để quét
+  useEffect(() => {
+    if (initialVideoUrl && initialVideoUrl !== preview) {
+      setPreview(initialVideoUrl);
+      
+      // Reset state để sẵn sàng phân tích video mới
+      setResult(null);
+      setError(null);
+      videoProcessedRef.current = false;
+      analysisCompleteCalledRef.current = false;
+      videoEndedRef.current = false;
+      startTimeRef.current = 0;
+      
+      // Set video source và tự động play sau khi load
+      setTimeout(() => {
+        if (videoRef.current) {
+          const videoUrl = initialVideoUrl.startsWith('http') 
+            ? initialVideoUrl 
+            : `http://localhost:8080/${initialVideoUrl}`;
+          
+          // Set crossOrigin only for server URLs (not blob URLs)
+          // Server URLs need CORS headers from backend
+          if (!videoUrl.startsWith('blob:')) {
+            videoRef.current.crossOrigin = 'anonymous';
+          } else {
+            videoRef.current.removeAttribute('crossOrigin');
+          }
+          videoRef.current.src = videoUrl;
+          
+          videoRef.current.onloadedmetadata = () => {
+            // Đảm bảo WebSocket đã kết nối
+            if (!isPythonConnected && pythonExerciseType) {
+              connectPythonAI(pythonExerciseType);
+            }
+          };
+          
+          videoRef.current.oncanplay = () => {
+            // Đợi WebSocket kết nối trước khi play
+            const waitForConnection = setInterval(() => {
+              if (isPythonConnected) {
+                clearInterval(waitForConnection);
+                resetPythonAI();
+                startTimeRef.current = Date.now();
+                videoRef.current?.play().catch(() => {
+                  // Auto-play failed, user will need to click play manually
+                });
+              } else if (pythonError) {
+                clearInterval(waitForConnection);
+              }
+            }, 100);
+            
+            setTimeout(() => {
+              clearInterval(waitForConnection);
+            }, 5000);
+          };
+        }
+      }, 100);
+    }
+  }, [initialVideoUrl, preview, isPythonConnected, pythonExerciseType, connectPythonAI, pythonError, resetPythonAI]);
 
   // Video ref - sử dụng trực tiếp như FitnessAIDemo
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -88,13 +140,30 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
   const startTimeRef = useRef<number>(0);
   const analysisCompleteCalledRef = useRef(false);
   const videoEndedRef = useRef(false); // Track video ended state
+  // ✅ FIX Lỗi 19: Track mounted state
+  const isMountedRef = useRef(true);
+  const previewUrlRef = useRef<string | null>(null); // ✅ FIX Lỗi 12: Track URL for cleanup
 
   const targetTotalReps = targetReps * targetSets;
 
-  // Connect WebSocket when exercise type is available - giống FitnessAIDemo
+  // ✅ FIX Lỗi 19: Track mounted state
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      // ✅ FIX: Only cleanup blob URLs on unmount, not regular URLs
+      // Don't revoke if we have a result (user might want to see it)
+      if (previewUrlRef.current && previewUrlRef.current.startsWith('blob:') && !result) {
+        URL.revokeObjectURL(previewUrlRef.current);
+        previewUrlRef.current = null;
+      }
+    };
+  }, [result]); // Include result in deps to prevent cleanup when result exists
+
+  // Connect WebSocket when exercise type is available - GIỐNG HỆT FitnessAIDemo
   useEffect(() => {
     if (pythonExerciseType) {
-      console.log('Connecting to Python AI for exercise:', pythonExerciseType);
+      // Auto-connect WebSocket when component mounts or exercise type changes
       connectPythonAI(pythonExerciseType);
       return () => {
         resetPythonAI();
@@ -103,7 +172,7 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pythonExerciseType]);
 
-  // Process video frames - WebSocket mode (continuous) - giống FitnessAIDemo
+  // ✅ CẢI THIỆN: Process video frames - WebSocket mode (continuous) - GIỐNG HỆT FitnessAIDemo
   useEffect(() => {
     if (!videoRef.current || !isPythonConnected) {
       if (intervalRef.current) {
@@ -113,25 +182,16 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
       return;
     }
 
-    // WebSocket: send frames continuously when video is playing
-    console.log('🎬 [AIRepCounter] Setting up frame sending interval...');
-    console.log('🎬 [AIRepCounter] Video state:', {
-      hasVideo: !!videoRef.current,
-      isConnected: isPythonConnected,
-      paused: videoRef.current?.paused,
-      readyState: videoRef.current?.readyState,
-    });
-    
+    // ✅ GIỐNG HỆT FitnessAIDemo: WebSocket: send frames continuously when video is playing
     intervalRef.current = setInterval(() => {
-      if (videoRef.current && isPythonConnected && !videoRef.current.paused && videoRef.current.readyState >= 2) {
+      if (videoRef.current && isPythonConnected && !videoRef.current.paused) {
+        framesSentRef.current += 1;
+        const newCount = framesSentRef.current;
+        setFramesSent(newCount);
+        if (newCount % 10 === 0) {
+          console.log('📤 [AIRepCounter] Frames sent:', newCount);
+        }
         sendFrameToPython(videoRef.current);
-      } else {
-        console.log('⏸️ [AIRepCounter] Skipping frame send:', {
-          hasVideo: !!videoRef.current,
-          isConnected: isPythonConnected,
-          paused: videoRef.current?.paused,
-          readyState: videoRef.current?.readyState,
-        });
       }
     }, 100); // 10 FPS - giống FitnessAIDemo
 
@@ -151,6 +211,49 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
     }
   }, [pythonError]);
 
+  // Debug: Track frame sending and metrics receiving
+  const [framesSent, setFramesSent] = useState(0);
+  const [metricsCount, setMetricsCount] = useState(0);
+  const framesSentRef = useRef(0);
+  const metricsCountRef = useRef(0);
+
+  useEffect(() => {
+    if (pythonMetrics) {
+      const newCount = metricsCountRef.current + 1;
+      metricsCountRef.current = newCount;
+      setMetricsCount(newCount);
+      console.log('📥 [AIRepCounter] Metrics received! Count:', newCount, 'Reps:', pythonMetrics.reps);
+    }
+  }, [pythonMetrics]);
+
+  // ✅ FIX: Watch video ended state and stop interval immediately
+  useEffect(() => {
+    const checkVideoEnded = () => {
+      if (videoRef.current?.ended || videoEndedRef.current) {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+      }
+    };
+    
+    // Check immediately
+    checkVideoEnded();
+    
+    // Also check periodically (every 500ms) to catch video ended state
+    const checkInterval = setInterval(checkVideoEnded, 500);
+    
+    return () => {
+      clearInterval(checkInterval);
+    };
+  }, []); // Run once on mount, then check periodically
+
+  // ✅ FIX Lỗi 20: Use ref for onAnalysisComplete to avoid dependency issues
+  const onAnalysisCompleteRef = useRef(onAnalysisComplete);
+  useEffect(() => {
+    onAnalysisCompleteRef.current = onAnalysisComplete;
+  }, [onAnalysisComplete]);
+
   // Function to process analysis - extracted để có thể gọi từ nhiều nơi
   const processAnalysis = useCallback(() => {
     const isVideoEnded = videoRef.current?.ended || videoEndedRef.current;
@@ -162,22 +265,13 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
       analysisCompleteCalledRef.current ||
       !pythonMetrics ||
       typeof pythonMetrics.reps !== 'number' ||
+      isNaN(pythonMetrics.reps) || // ✅ FIX Lỗi 17: Check isNaN
+      !isFinite(pythonMetrics.reps) || // ✅ FIX Lỗi 17: Check Infinity
       pythonMetrics.reps <= 0
     ) {
-      console.log('⏸️ [AIRepCounter] processAnalysis: Conditions not met', {
-        hasVideo: !!videoRef.current,
-        videoEnded: videoRef.current?.ended,
-        videoEndedRef: videoEndedRef.current,
-        isVideoEnded,
-        videoProcessed: videoProcessedRef.current,
-        analysisCompleteCalled: analysisCompleteCalledRef.current,
-        hasMetrics: !!pythonMetrics,
-        reps: pythonMetrics?.reps,
-      });
       return;
     }
 
-    console.log('✅ [AIRepCounter] processAnalysis: Conditions met, processing analysis...');
     videoProcessedRef.current = true;
     analysisCompleteCalledRef.current = true;
 
@@ -186,10 +280,12 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
     const qualityScore = typeof pythonMetrics.quality_score === 'number' ? pythonMetrics.quality_score : 0;
     const processingTimeMs = startTimeRef.current ? Date.now() - startTimeRef.current : 0;
     
-    // Build feedback from form errors (safely)
-    const formErrors = Array.isArray(pythonMetrics.form_errors) ? pythonMetrics.form_errors : [];
+    // ✅ FIX Lỗi 16: Filter null/undefined form errors
+    const formErrors = Array.isArray(pythonMetrics.form_errors) 
+      ? pythonMetrics.form_errors.filter(e => e != null && typeof e === 'object' && 'message' in e)
+      : [];
     const formErrorsText = formErrors.length > 0
-      ? formErrors.map(e => e && e.message ? e.message : 'Form issue detected').join('. ')
+      ? formErrors.map(e => (e as { message?: string }).message || 'Form issue detected').join('. ')
       : 'Good form maintained throughout.';
     
     const feedback = isPassed
@@ -214,55 +310,20 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
       userChallengeId: undefined,
     };
 
-    console.log('✅ [AIRepCounter] Python AI Analysis Complete:', {
-      correctReps: analysis.correctReps,
-      targetTotalReps: targetTotalReps,
-      accuracy: (analysis.accuracy * 100).toFixed(1) + '%',
-      formScore: (analysis.formScore * 100).toFixed(1) + '%',
-      qualityScore: qualityScore,
-      formErrors: formErrors,
-      is_valid_form: is_valid_form,
-      isPassed: analysis.isPassed,
-      status: analysis.isPassed ? '✅ PASSED - Challenge will be marked as COMPLETED' : '❌ FAILED - Need more reps',
-    });
-
-    console.log('💾 [AIRepCounter] ========== SETTING RESULT STATE ==========');
-    console.log('💾 [AIRepCounter] Setting result state with:', JSON.stringify(analysis, null, 2));
     setResult(analysis);
     setProcessingTime(processingTimeMs);
-    console.log('✅ [AIRepCounter] Result state set successfully');
     
     // Call onAnalysisComplete only once
     try {
-      console.log('📞 [AIRepCounter] ========== CALLING onAnalysisComplete ==========');
-      console.log('📞 [AIRepCounter] Calling onAnalysisComplete with analysis:', JSON.stringify(analysis, null, 2));
-      console.log('📞 [AIRepCounter] onAnalysisComplete function type:', typeof onAnalysisComplete);
-      console.log('📞 [AIRepCounter] onAnalysisComplete function:', onAnalysisComplete);
-      onAnalysisComplete(analysis);
-      console.log('✅ [AIRepCounter] onAnalysisComplete called successfully');
+      // ✅ FIX Lỗi 20: Use ref to avoid dependency issues
+      onAnalysisCompleteRef.current(analysis);
     } catch (error) {
-      console.error('❌ [AIRepCounter] ========== ERROR CALLING onAnalysisComplete ==========');
       console.error('❌ [AIRepCounter] Error calling onAnalysisComplete:', error);
-      console.error('❌ [AIRepCounter] Error details:', {
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
     }
-  }, [pythonMetrics, targetTotalReps, preview, onAnalysisComplete]);
+  }, [pythonMetrics, targetTotalReps, preview]); // ✅ FIX Lỗi 20: Remove onAnalysisComplete from deps - use ref instead
 
   // Auto-complete analysis when video ends and we have Python AI metrics
   useEffect(() => {
-    console.log('🔍 [AIRepCounter] useEffect triggered:', {
-      hasVideo: !!videoRef.current,
-      videoEnded: videoRef.current?.ended,
-      videoEndedRef: videoEndedRef.current,
-      videoProcessed: videoProcessedRef.current,
-      analysisCompleteCalled: analysisCompleteCalledRef.current,
-      hasMetrics: !!pythonMetrics,
-      reps: pythonMetrics?.reps,
-      targetTotalReps,
-    });
-
     // Check if video ended and we have metrics
     // Check both videoRef.current.ended and videoEndedRef.current
     const isVideoEnded = videoRef.current?.ended || videoEndedRef.current;
@@ -274,19 +335,11 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
       !analysisCompleteCalledRef.current &&
       pythonMetrics &&
       typeof pythonMetrics.reps === 'number' &&
+      !isNaN(pythonMetrics.reps) && // ✅ FIX Lỗi 17: Check isNaN
+      isFinite(pythonMetrics.reps) && // ✅ FIX Lỗi 17: Check Infinity
       pythonMetrics.reps > 0
     ) {
-      console.log('✅ [AIRepCounter] useEffect: Conditions met, calling processAnalysis...');
       processAnalysis();
-    } else {
-      console.log('⏸️ [AIRepCounter] useEffect: Conditions not met, skipping analysis', {
-        hasVideo: !!videoRef.current,
-        isVideoEnded,
-        videoProcessed: videoProcessedRef.current,
-        analysisCompleteCalled: analysisCompleteCalledRef.current,
-        hasMetrics: !!pythonMetrics,
-        reps: pythonMetrics?.reps,
-      });
     }
   }, [pythonMetrics, targetTotalReps, preview, processAnalysis]);
 
@@ -311,54 +364,85 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
     setResult(null);
     videoProcessedRef.current = false;
     analysisCompleteCalledRef.current = false;
-    videoEndedRef.current = false;
+    videoEndedRef.current = false; // ✅ FIX Lỗi 18: Reset videoEndedRef
+    startTimeRef.current = 0; // ✅ FIX: Reset start time
+    
+    // ✅ FIX: Stop any existing interval when uploading new video
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    // ✅ FIX Lỗi 12: Revoke old URL before creating new one
+    if (previewUrlRef.current && previewUrlRef.current.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrlRef.current);
+    }
 
     // Create preview URL - giống FitnessAIDemo
     const url = URL.createObjectURL(file);
+    previewUrlRef.current = url; // ✅ FIX Lỗi 12: Track URL for cleanup
     setPreview(url);
+    
+    // ✅ FIX: Reset metrics và đảm bảo WebSocket kết nối trước khi load video
+    console.log('🔄 [AIRepCounter] Resetting AI counter for new video upload');
+    resetPythonAI();
+    framesSentRef.current = 0;
+    setFramesSent(0);
+    metricsCountRef.current = 0;
+    setMetricsCount(0);
+    
+    // Ensure WebSocket is connected
+    if (!isPythonConnected && pythonExerciseType) {
+      console.log('🔌 [AIRepCounter] Connecting WebSocket for exercise:', pythonExerciseType);
+      connectPythonAI(pythonExerciseType);
+    }
     
     // Set video source - giống FitnessAIDemo
     // Use setTimeout to ensure video element is rendered
     setTimeout(() => {
       if (videoRef.current) {
-        videoRef.current.src = url;
-        
-        // Reset metrics when new video is loaded
-        resetPythonAI();
-        
-        // Ensure WebSocket is connected
-        if (!isPythonConnected && pythonExerciseType) {
-          console.log('Connecting WebSocket after video upload');
-          connectPythonAI(pythonExerciseType);
+        // Only set crossOrigin for non-blob URLs (server URLs)
+        // Blob URLs don't need crossOrigin and setting it may cause issues
+        if (!url.startsWith('blob:')) {
+          videoRef.current.crossOrigin = 'anonymous';
+        } else {
+          // Remove crossOrigin for blob URLs
+          videoRef.current.removeAttribute('crossOrigin');
         }
+        videoRef.current.src = url;
         
         // Wait for video to load metadata
         videoRef.current.onloadedmetadata = () => {
-          console.log('📥 [AIRepCounter] Video metadata loaded, ready to analyze');
-          console.log('📥 [AIRepCounter] Video info:', {
-            duration: videoRef.current?.duration,
-            readyState: videoRef.current?.readyState,
-            paused: videoRef.current?.paused,
-          });
+          // ✅ FIX: Đảm bảo WebSocket đã kết nối trước khi video sẵn sàng
+          if (!isPythonConnected && pythonExerciseType) {
+            connectPythonAI(pythonExerciseType);
+          }
         };
         
+        // ✅ CẢI THIỆN: Auto-play video sau khi load xong để bắt đầu phân tích tự động - giống FitnessAIDemo
         videoRef.current.oncanplay = () => {
-          console.log('▶️ [AIRepCounter] Video can play now');
-          console.log('▶️ [AIRepCounter] Video state:', {
-            readyState: videoRef.current?.readyState,
-            paused: videoRef.current?.paused,
-            currentTime: videoRef.current?.currentTime,
-            duration: videoRef.current?.duration,
-          });
-          // Auto-play video if possible (may be blocked by browser)
-          if (videoRef.current && videoRef.current.paused) {
-            console.log('▶️ [AIRepCounter] Attempting to auto-play video...');
-            videoRef.current.play().then(() => {
-              console.log('✅ [AIRepCounter] Video auto-played successfully');
-            }).catch((err) => {
-              console.warn('⚠️ [AIRepCounter] Auto-play blocked by browser, user needs to click play:', err);
-              console.warn('⚠️ [AIRepCounter] Please click the play button to start analysis');
-            });
+          // ✅ CẢI THIỆN: Auto-play video để bắt đầu phân tích tự động - giống FitnessAIDemo
+          // Chỉ auto-play nếu chưa có result (tránh replay khi đã có kết quả)
+          if (!result && videoRef.current && videoRef.current.paused) {
+            // ✅ CẢI THIỆN: Đợi WebSocket kết nối trước khi play - giống FitnessAIDemo
+            const waitForConnection = setInterval(() => {
+              if (isPythonConnected) {
+                clearInterval(waitForConnection);
+                // ✅ CẢI THIỆN: Reset counter trước khi play để bắt đầu đếm mới - giống FitnessAIDemo
+                resetPythonAI();
+                startTimeRef.current = Date.now();
+                videoRef.current?.play().catch((err) => {
+                  // Nếu auto-play fail (do browser policy), user sẽ phải bấm play manually
+                });
+              } else if (pythonError) {
+                clearInterval(waitForConnection);
+              }
+            }, 100);
+            
+            // Timeout sau 5 giây nếu WebSocket chưa kết nối
+            setTimeout(() => {
+              clearInterval(waitForConnection);
+            }, 5000);
           }
         };
       }
@@ -411,18 +495,12 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
     a.click();
   };
 
-  // Log result state for debugging
-  console.log('🎨 [AIRepCounter] ========== RENDERING COMPONENT ==========');
-  console.log('🎨 [AIRepCounter] result state:', result);
-  console.log('🎨 [AIRepCounter] Will render results section:', !!result);
-  if (result) {
-    console.log('🎨 [AIRepCounter] Rendering results with:', JSON.stringify(result, null, 2));
-  }
+  
+  // ✅ FIX: Ensure video preview is preserved when showing results
+  // Note: Metrics area is always shown, even when result exists
+  const isPassed = result ? result.correctReps >= targetTotalReps : false;
   
   if (result) {
-    const isPassed = result.correctReps >= targetTotalReps;
-    console.log('🎨 [AIRepCounter] isPassed:', isPassed, `(${result.correctReps} >= ${targetTotalReps})`);
-    
     return (
       <div className="w-full">
         <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -521,14 +599,17 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
             </div>
           </div>
 
-          {/* Video Preview */}
-          {result.videoUrl && (
+          {/* Video Preview - Use preview state if result.videoUrl is not available */}
+          {(result.videoUrl || preview) && (
             <div className="mb-6">
               <p className="text-sm font-semibold text-gray-700 mb-3">📹 Recorded Video</p>
               <video
-                src={result.videoUrl}
+                src={result.videoUrl || preview}
                 controls
-                className="w-full max-h-80 rounded-lg bg-black border border-gray-200"
+                className="w-full max-h-64 rounded-lg bg-black border border-gray-200 object-contain"
+                onError={(e) => {
+                  console.error('❌ [AIRepCounter] Video load error:', e);
+                }}
               />
             </div>
           )}
@@ -566,6 +647,192 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
             </button>
           </div>
         </div>
+        
+        {/* Debug Panel - Show connection and frame sending status */}
+        <div className="mt-4 p-3 bg-gray-50 border border-gray-300 rounded-lg">
+          <h4 className="text-sm font-bold text-gray-700 mb-2">🔍 Debug Status</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+            <div>
+              <span className="font-semibold">WebSocket: </span>
+              <span className={isPythonConnected ? 'text-green-600' : 'text-red-600'}>
+                {isPythonConnected ? '✅ Connected' : '❌ Disconnected'}
+              </span>
+            </div>
+            <div>
+              <span className="font-semibold">Video: </span>
+              <span className={videoRef.current && !videoRef.current.paused ? 'text-green-600' : 'text-yellow-600'}>
+                {videoRef.current 
+                  ? (videoRef.current.paused ? '⏸️ Paused' : '▶️ Playing')
+                  : '⏹️ No Video'}
+              </span>
+            </div>
+            <div>
+              <span className="font-semibold">Frames Sent: </span>
+              <span className="text-blue-600">{framesSent}</span>
+            </div>
+            <div>
+              <span className="font-semibold">Metrics Received: </span>
+              <span className={metricsCount > 0 ? 'text-green-600' : 'text-red-600'}>
+                {metricsCount} {pythonMetrics ? '(Latest: ' + pythonMetrics.reps + ' reps)' : ''}
+              </span>
+            </div>
+          </div>
+          {isPythonConnected && !pythonMetrics && videoRef.current && !videoRef.current.paused && (
+            <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded text-xs">
+              ⚠️ WebSocket connected but no metrics received. Check:
+              <ul className="list-disc list-inside mt-1 ml-2">
+                <li>Python AI service is running on port 8000</li>
+                <li>Frames are being sent (check Frames Sent count above)</li>
+                <li>Check browser console for WebSocket errors</li>
+              </ul>
+            </div>
+          )}
+        </div>
+
+        {/* Real-time Metrics Display - Always show, even when result exists */}
+        <div className="mt-6 p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold flex items-center gap-2">
+              <Activity className="text-blue-600" size={20} />
+              Real-time Analysis Results
+            </h3>
+            <div className="flex items-center gap-2">
+              {isPythonProcessing && (
+                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full animate-pulse">
+                  Processing...
+                </span>
+              )}
+              {!isPythonConnected && (
+                <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full flex items-center gap-1">
+                  <WifiOff className="w-3 h-3" />
+                  Not Connected
+                </span>
+              )}
+              {isPythonConnected && !pythonMetrics && (
+                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
+                  Waiting for data...
+                </span>
+              )}
+              {isPythonConnected && pythonMetrics && (
+                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full flex items-center gap-1">
+                  <Wifi className="w-3 h-3" />
+                  Connected
+                </span>
+              )}
+            </div>
+          </div>
+          
+          {/* Connection Status Warning */}
+          {!isPythonConnected && (
+            <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-orange-800 mb-1">WebSocket Not Connected</p>
+                  <p className="text-xs text-orange-700">
+                    {pythonError 
+                      ? `Error: ${pythonError}. Please ensure the Python AI service is running on port 8000.`
+                      : 'Please ensure the Python AI service is running on port 8000. The metrics will update once connected.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-3 bg-white rounded-lg">
+              <p className="text-sm text-gray-600 mb-1">Reps</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {pythonMetrics && typeof pythonMetrics.reps === 'number' ? pythonMetrics.reps : (result ? result.correctReps : 0)}
+              </p>
+              {!isPythonConnected && !result && (
+                <p className="text-xs text-gray-400 mt-1">Not connected</p>
+              )}
+            </div>
+            
+            <div className="p-3 bg-white rounded-lg">
+              <p className="text-sm text-gray-600 mb-1">Quality Score</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {pythonMetrics && typeof pythonMetrics.quality_score === 'number' 
+                  ? pythonMetrics.quality_score.toFixed(1) 
+                  : (result ? (result.formScore * 100).toFixed(1) : '--')}
+              </p>
+              {!isPythonConnected && !result && (
+                <p className="text-xs text-gray-400 mt-1">Not connected</p>
+              )}
+            </div>
+            
+            <div className="p-3 bg-white rounded-lg">
+              <p className="text-sm text-gray-600 mb-1">State</p>
+              <p className="text-lg font-semibold text-gray-900 capitalize">
+                {pythonMetrics?.state || (result ? 'completed' : (isPythonConnected ? 'waiting' : 'disconnected'))}
+              </p>
+              {!isPythonConnected && !result && (
+                <p className="text-xs text-gray-400 mt-1">WebSocket offline</p>
+              )}
+            </div>
+            
+            <div className="p-3 bg-white rounded-lg">
+              <p className="text-sm text-gray-600 mb-1">Form Valid</p>
+              <p className={`text-lg font-semibold ${
+                pythonMetrics && typeof pythonMetrics.is_valid_form === 'boolean' && pythonMetrics.is_valid_form
+                  ? 'text-green-600' 
+                  : result && result.isPassed
+                  ? 'text-green-600'
+                  : pythonMetrics && typeof pythonMetrics.is_valid_form === 'boolean'
+                  ? 'text-red-600'
+                  : 'text-gray-500'
+              }`}>
+                {pythonMetrics && typeof pythonMetrics.is_valid_form === 'boolean'
+                  ? (pythonMetrics.is_valid_form ? 'Yes' : 'No')
+                  : (result ? (result.isPassed ? 'Yes' : 'No') : '--')}
+              </p>
+              {!isPythonConnected && !result && (
+                <p className="text-xs text-gray-400 mt-1">Not connected</p>
+              )}
+            </div>
+          </div>
+
+          {/* Form Errors */}
+          {pythonMetrics && Array.isArray(pythonMetrics.form_errors) && pythonMetrics.form_errors.length > 0 && (
+            <div className="mt-4">
+              <p className="text-sm font-semibold text-gray-700 mb-2">Form Errors:</p>
+              <ul className="space-y-1">
+                {pythonMetrics.form_errors.map((error: any, idx: number) => (
+                  <li
+                    key={idx}
+                    className={`text-sm p-2 rounded ${
+                      error.severity === 'error'
+                        ? 'bg-red-100 text-red-700'
+                        : error.severity === 'warning'
+                        ? 'bg-yellow-100 text-yellow-700'
+                        : 'bg-blue-100 text-blue-700'
+                    }`}
+                  >
+                    {error.message || (typeof error === 'string' ? error : 'Form issue detected')}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Angles */}
+          {pythonMetrics && pythonMetrics.angles && Object.keys(pythonMetrics.angles).length > 0 && (
+            <div className="mt-4">
+              <p className="text-sm font-semibold text-gray-700 mb-2">Angles:</p>
+              <div className="grid grid-cols-2 gap-2">
+                {Object.entries(pythonMetrics.angles).map(([key, value]) => (
+                  <div key={key} className="text-sm">
+                    <span className="font-medium">{key}:</span>{' '}
+                    <span className="text-gray-600">
+                      {typeof value === 'number' ? value.toFixed(1) : value}°
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -586,35 +853,30 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
           </div>
         </div>
 
-        {/* Python AI Connection Status */}
-        <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {isPythonConnected ? (
-                <>
-                  <Wifi className="w-5 h-5 text-green-600" />
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">Python AI Connected</p>
-                    <p className="text-xs text-gray-600">Exercise: {pythonExerciseType}</p>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <WifiOff className="w-5 h-5 text-red-600" />
-                  <div>
-                    <p className="text-sm font-semibold text-red-600">Python AI Disconnected</p>
-                    <p className="text-xs text-gray-600">Connecting to AI service...</p>
-                  </div>
-                </>
-              )}
-            </div>
-            {pythonError && (
-              <div className="flex items-center gap-2 text-red-600">
-                <AlertCircle className="w-4 h-4" />
-                <span className="text-xs">{pythonError}</span>
-              </div>
+        {/* Connection Status - Giống FitnessAIDemo */}
+        <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+          <div className="flex items-center gap-2 mb-2">
+            {isPythonConnected ? (
+              <>
+                <Wifi className="text-green-600" size={20} />
+                <span className="font-semibold text-green-600">Connected</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="text-red-600" size={20} />
+                <span className="font-semibold text-red-600">Disconnected</span>
+              </>
             )}
           </div>
+          {pythonError && (
+            <div className="flex items-center gap-2 text-red-600 text-sm">
+              <AlertCircle size={16} />
+              <span>{pythonError}</span>
+            </div>
+          )}
+          {!pythonError && (
+            <p className="text-xs text-gray-600">Exercise Type: {pythonExerciseType}</p>
+          )}
         </div>
 
         {/* Video Upload Area */}
@@ -627,6 +889,40 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
             disabled={analyzing || isLoading}
             className="w-full p-2 border rounded-lg"
           />
+          {preview && !result && (
+            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800 mb-2">
+                ✅ Video đã được tải lên. Video sẽ tự động phát để bắt đầu phân tích.
+              </p>
+              {!isPythonConnected && (
+                <p className="text-xs text-orange-600">
+                  ⚠️ Đang kết nối với AI service...
+                </p>
+              )}
+              {isPythonConnected && videoRef.current && videoRef.current.paused && (
+                <button
+                  onClick={() => {
+                    if (videoRef.current && isPythonConnected) {
+                      console.log('🔄 [AIRepCounter] Resetting AI counter and starting video');
+                      resetPythonAI();
+                      framesSentRef.current = 0;
+                      setFramesSent(0);
+                      metricsCountRef.current = 0;
+                      setMetricsCount(0);
+                      startTimeRef.current = Date.now();
+                      videoRef.current.play().catch((err) => {
+                        console.error('❌ [AIRepCounter] Failed to play video:', err);
+                        setError('Failed to play video. Please try again.');
+                      });
+                    }
+                  }}
+                  className="mt-2 w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition"
+                >
+                  ▶️ Start Analysis
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Video Player - giống FitnessAIDemo - luôn render */}
@@ -665,96 +961,45 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
           <div className="relative">
             <video
               ref={videoRef}
-              className="w-full rounded-lg bg-black"
+              className="w-full max-h-64 rounded-lg bg-black object-contain"
               controls
               muted
               playsInline
-              autoPlay={false}
+              autoPlay={true}
+              crossOrigin="anonymous"
               onPlay={() => {
-                console.log('▶️ [AIRepCounter] ========== VIDEO STARTED PLAYING ==========');
-                console.log('▶️ [AIRepCounter] Video play event:', {
-                  currentTime: videoRef.current?.currentTime,
-                  duration: videoRef.current?.duration,
-                  readyState: videoRef.current?.readyState,
-                });
-                startTimeRef.current = Date.now();
-                console.log('▶️ [AIRepCounter] Start time set:', startTimeRef.current);
-                resetPythonAI();
-                console.log('▶️ [AIRepCounter] WebSocket state:', {
-                  isConnected: isPythonConnected,
-                  hasMetrics: !!pythonMetrics,
-                  exerciseType: pythonExerciseType,
-                });
-              }}
-              onPause={() => {
-                console.log('⏸️ [AIRepCounter] Video paused at:', videoRef.current?.currentTime);
-              }}
-              onLoadedData={() => {
-                console.log('📥 [AIRepCounter] Video data loaded, ready to analyze');
-                console.log('📥 [AIRepCounter] Video state after load:', {
-                  readyState: videoRef.current?.readyState,
-                  paused: videoRef.current?.paused,
-                  duration: videoRef.current?.duration,
-                });
-              }}
-              onCanPlay={() => {
-                console.log('▶️ [AIRepCounter] Video can play event fired');
-                console.log('▶️ [AIRepCounter] Video state:', {
-                  readyState: videoRef.current?.readyState,
-                  paused: videoRef.current?.paused,
-                  currentTime: videoRef.current?.currentTime,
-                  duration: videoRef.current?.duration,
-                });
-                // Try to auto-play if video is paused
-                if (videoRef.current && videoRef.current.paused) {
-                  console.log('▶️ [AIRepCounter] Attempting to auto-play video...');
-                  videoRef.current.play().then(() => {
-                    console.log('✅ [AIRepCounter] Video auto-played successfully');
-                  }).catch((err) => {
-                    console.warn('⚠️ [AIRepCounter] Auto-play blocked, user needs to click play:', err);
-                  });
+                console.log('▶️ [AIRepCounter] Video play event triggered');
+                // ✅ FIX: Only reset if this is a new video (not replaying)
+                // Don't reset if we already have a result (user is replaying to see results)
+                if (!result && startTimeRef.current === 0) {
+                  console.log('🔄 [AIRepCounter] Resetting AI counter for new analysis');
+                  startTimeRef.current = Date.now();
+                  resetPythonAI(); // Only reset for new analysis
+                  framesSentRef.current = 0;
+                  setFramesSent(0);
+                  metricsCountRef.current = 0;
+                  setMetricsCount(0);
                 }
               }}
               onEnded={() => {
-                console.log('🏁 [AIRepCounter] ========== VIDEO ENDED ==========');
-                console.log('🏁 [AIRepCounter] Video ended event:', {
-                  duration: videoRef.current?.duration,
-                  currentTime: videoRef.current?.currentTime,
-                  hasMetrics: !!pythonMetrics,
-                  reps: pythonMetrics?.reps,
-                  metricsFull: JSON.stringify(pythonMetrics, null, 2),
-                });
                 videoEndedRef.current = true;
-                // Trigger analysis check immediately when video ends
-                // Use setTimeout to ensure metrics are ready
-                setTimeout(() => {
-                  if (videoRef.current && videoRef.current.ended && !analysisCompleteCalledRef.current) {
-                    console.log('🏁 [AIRepCounter] After delay, checking metrics:', {
-                      hasMetrics: !!pythonMetrics,
-                      reps: pythonMetrics?.reps,
-                      metricsType: typeof pythonMetrics?.reps,
-                      metricsFull: JSON.stringify(pythonMetrics, null, 2),
-                    });
-                    // processAnalysis will be called by useEffect when pythonMetrics updates
-                    // But we can also try to call it directly here
-                    if (pythonMetrics && typeof pythonMetrics.reps === 'number' && pythonMetrics.reps > 0) {
-                      console.log('✅ [AIRepCounter] Video ended with metrics, calling processAnalysis...');
-                      processAnalysis();
-                    } else {
-                      console.warn('⚠️ [AIRepCounter] Video ended but no valid metrics yet, waiting for useEffect...');
-                    }
-                  }
-                }, 1000); // Delay to ensure metrics are ready
+                
+                // ✅ FIX: Stop sending frames immediately when video ends
+                if (intervalRef.current) {
+                  clearInterval(intervalRef.current);
+                  intervalRef.current = null;
+                }
               }}
             />
               
               {/* Real-time Rep Counter Overlay */}
-              {videoRef.current && !videoRef.current.paused && isPythonConnected && pythonMetrics && typeof pythonMetrics.reps === 'number' && (
-                <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-sm rounded-lg p-4 border-2 border-blue-500">
+              {/* ✅ FIX: Luôn hiển thị overlay, ngay cả khi chưa có metrics */}
+              {isPythonConnected && (
+                <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-sm rounded-lg p-4 border-2 border-blue-500 z-10">
                   <div className="text-center">
                     <p className="text-xs text-gray-300 uppercase mb-1">Reps</p>
                     <p className="text-5xl font-bold text-white mb-1">
-                      {pythonMetrics.reps}
+                      {pythonMetrics && typeof pythonMetrics.reps === 'number' ? pythonMetrics.reps : 0}
                     </p>
                     <p className="text-xs text-gray-400">
                       Target: {targetTotalReps}
@@ -763,40 +1008,47 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
                       <div
                         className="bg-blue-500 h-2 rounded-full transition-all duration-300"
                         style={{
-                          width: `${Math.min((pythonMetrics.reps / targetTotalReps) * 100, 100)}%`,
+                          width: `${Math.min(((pythonMetrics && typeof pythonMetrics.reps === 'number' ? pythonMetrics.reps : 0) / targetTotalReps) * 100, 100)}%`,
                         }}
                       />
                     </div>
+                    {(pythonMetrics?.quality_score !== undefined || pythonMetrics?.quality_score === 0) && (
+                      <p className="text-xs text-gray-300 mt-2">
+                        Quality: {pythonMetrics && typeof pythonMetrics.quality_score === 'number' ? pythonMetrics.quality_score.toFixed(0) : '--'}%
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
               
               {/* State Indicator Overlay */}
-              {videoRef.current && !videoRef.current.paused && isPythonConnected && pythonMetrics && pythonMetrics.state && (
-                <div className="absolute top-4 right-4">
+              {/* ✅ FIX: Luôn hiển thị state indicator khi connected */}
+              {isPythonConnected && (
+                <div className="absolute top-4 right-4 z-10">
                   <div
                     className={`px-3 py-2 rounded-lg backdrop-blur-sm font-medium ${
-                      pythonMetrics.state === 'up'
+                      pythonMetrics?.state === 'up'
                         ? 'bg-green-500/80 text-white'
-                        : pythonMetrics.state === 'down'
+                        : pythonMetrics?.state === 'down'
                         ? 'bg-orange-500/80 text-white'
-                        : pythonMetrics.state === 'holding'
+                        : pythonMetrics?.state === 'holding'
                         ? 'bg-blue-500/80 text-white'
                         : 'bg-gray-500/80 text-white'
                     }`}
                   >
-                    {pythonMetrics.state === 'up' ? '↑ Up' : 
-                     pythonMetrics.state === 'down' ? '↓ Down' : 
-                     pythonMetrics.state === 'holding' ? '⏸ Holding' : 
-                     pythonMetrics.state === 'rest' ? '⏸ Rest' :
+                    {pythonMetrics?.state === 'up' ? '↑ Up' : 
+                     pythonMetrics?.state === 'down' ? '↓ Down' : 
+                     pythonMetrics?.state === 'holding' ? '⏸ Holding' : 
+                     pythonMetrics?.state === 'rest' ? '⏸ Rest' :
                      'Waiting...'}
                   </div>
                 </div>
               )}
 
               {/* Form Errors Overlay */}
-              {videoRef.current && !videoRef.current.paused && isPythonConnected && pythonMetrics && Array.isArray(pythonMetrics.form_errors) && pythonMetrics.form_errors.length > 0 && (
-                <div className="absolute bottom-4 left-4 right-4 bg-red-500/90 backdrop-blur-sm rounded-lg p-3 border-2 border-red-400">
+              {/* ✅ FIX: Hiển thị ngay khi có metrics, không cần chờ video play */}
+              {isPythonConnected && pythonMetrics && Array.isArray(pythonMetrics.form_errors) && pythonMetrics.form_errors.length > 0 && (
+                <div className="absolute bottom-4 left-4 right-4 bg-red-500/90 backdrop-blur-sm rounded-lg p-3 border-2 border-red-400 z-10">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 text-white mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
@@ -819,114 +1071,233 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
             )}
           </div>
 
-        {/* Status Bar */}
-        <div className="flex items-center justify-between p-3 bg-white rounded-lg mb-4 border border-gray-200">
-          <div className="flex items-center gap-3 flex-wrap">
-            {isPythonConnected ? (
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                <span className="text-sm text-gray-600">AI Connected</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Loader className="w-4 h-4 text-blue-500 animate-spin" />
-                <span className="text-sm text-gray-600">Connecting...</span>
-              </div>
-            )}
-            {isPythonProcessing && (
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-                <span className="text-sm text-gray-600">Analyzing...</span>
-              </div>
-            )}
-            {pythonMetrics && typeof pythonMetrics.is_valid_form === 'boolean' && pythonMetrics.is_valid_form === false && (
-              <div className="flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-orange-500" />
-                <span className="text-sm text-orange-600">Form Issues Detected</span>
-              </div>
-            )}
-          </div>
-          <button
-            onClick={resetPythonAI}
-            disabled={!pythonMetrics || typeof pythonMetrics.reps !== 'number' || pythonMetrics.reps === 0}
-            className="px-4 py-2 text-sm font-medium text-white bg-orange-500 rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Reset
-          </button>
-        </div>
-
-        {/* Real-time Metrics Cards */}
-        {preview && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
-            {/* Reps Card */}
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-gray-600 uppercase">Reps</p>
-                <Activity className="w-4 h-4 text-blue-600" />
-              </div>
-              <p className="text-3xl font-bold text-blue-600">
-                {pythonMetrics && typeof pythonMetrics.reps === 'number' ? pythonMetrics.reps : 0}
-              </p>
-              <p className="text-xs text-gray-600 mt-1">
-                Target: {targetTotalReps} | Progress: {
-                  pythonMetrics && typeof pythonMetrics.reps === 'number' 
-                    ? Math.round((pythonMetrics.reps / targetTotalReps) * 100) 
-                    : 0
-                }%
-              </p>
+        {/* Auto-analyze status - Giống FitnessAIDemo */}
+        {/* ✅ FIX: Hiển thị status ngay cả khi chưa có preview */}
+        {isPythonConnected && (
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg mb-4">
+            <div className="flex items-center gap-2">
+              {isPythonProcessing ? (
+                <>
+                  <Loader className="animate-spin text-blue-600" size={16} />
+                  <span className="text-sm font-medium text-blue-700">Đang phân tích frame...</span>
+                </>
+              ) : preview ? (
+                <>
+                  <Activity className="text-blue-600" size={16} />
+                  <span className="text-sm font-medium text-blue-700">Tự động phân tích đang bật - Play video để bắt đầu</span>
+                </>
+              ) : (
+                <>
+                  <Activity className="text-blue-600" size={16} />
+                  <span className="text-sm font-medium text-blue-700">Sẵn sàng phân tích - Upload video để bắt đầu</span>
+                </>
+              )}
             </div>
-            
-            {/* State Card */}
-            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-gray-600 uppercase">State</p>
-                <TrendingUp className="w-4 h-4 text-green-600" />
-              </div>
-              <p className="text-2xl font-bold text-green-600 capitalize">
-                {pythonMetrics && pythonMetrics.state ? pythonMetrics.state : 'waiting'}
-              </p>
-              <p className="text-xs text-gray-600 mt-1">Current position</p>
-            </div>
-            
-            {/* Quality Score Card */}
-            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-gray-600 uppercase">Quality</p>
-                <Award className="w-4 h-4 text-purple-600" />
-              </div>
-              <p className="text-2xl font-bold text-purple-600">
-                {pythonMetrics && typeof pythonMetrics.quality_score === 'number' 
-                  ? pythonMetrics.quality_score.toFixed(0) 
-                  : '--'}%
-              </p>
-              <p className="text-xs text-gray-600 mt-1">
-                {pythonMetrics 
-                  ? (typeof pythonMetrics.is_valid_form === 'boolean'
-                      ? (pythonMetrics.is_valid_form ? 'Valid form' : 'Form issues')
-                      : 'Analyzing...')
-                  : 'Waiting for data'}
-              </p>
-            </div>
-
-            {/* Form Errors Card */}
-            {pythonMetrics && Array.isArray(pythonMetrics.form_errors) && pythonMetrics.form_errors.length > 0 && (
-              <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border border-red-200">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-gray-600 uppercase">Form Errors</p>
-                  <AlertCircle className="w-4 h-4 text-red-600" />
-                </div>
-                <div className="space-y-1">
-                  {pythonMetrics.form_errors.slice(0, 2).map((error, idx) => (
-                    <div key={idx} className="flex items-start gap-1">
-                      <span className="text-red-600 text-xs">•</span>
-                      <p className="text-xs text-red-700">{error.message}</p>
-                    </div>
-                  ))}
-                </div>
+            {pythonMetrics && (
+              <div className="mt-2 text-xs text-gray-600">
+                {typeof pythonMetrics.reps === 'number' && (
+                  <span>Reps: {pythonMetrics.reps} | </span>
+                )}
+                {typeof pythonMetrics.quality_score === 'number' && (
+                  <span>Quality: {pythonMetrics.quality_score.toFixed(0)}%</span>
+                )}
               </div>
             )}
           </div>
         )}
+
+        {/* Reset Button - Giống FitnessAIDemo */}
+        <button
+          onClick={() => resetPythonAI()}
+          className="mt-4 w-full px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-semibold"
+        >
+          Reset Counter
+        </button>
+
+        {/* Real-time Metrics Display - Giống FitnessAIDemo */}
+        {/* ✅ FIX: Luôn hiển thị metrics area, ngay cả khi chưa có data hoặc không kết nối được */}
+        <div className="mt-6 p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold flex items-center gap-2">
+              <Activity className="text-blue-600" size={20} />
+              Real-time Analysis Results
+            </h3>
+            <div className="flex items-center gap-2">
+              {isPythonProcessing && (
+                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full animate-pulse">
+                  Processing...
+                </span>
+              )}
+              {!isPythonConnected && (
+                <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full flex items-center gap-1">
+                  <WifiOff className="w-3 h-3" />
+                  Not Connected
+                </span>
+              )}
+              {isPythonConnected && !pythonMetrics && (
+                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
+                  Waiting for data...
+                </span>
+              )}
+              {isPythonConnected && pythonMetrics && (
+                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full flex items-center gap-1">
+                  <Wifi className="w-3 h-3" />
+                  Connected
+                </span>
+              )}
+            </div>
+          </div>
+          
+          {/* Connection Status Warning */}
+          {!isPythonConnected && (
+            <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-orange-800 mb-1">WebSocket Not Connected</p>
+                  <p className="text-xs text-orange-700">
+                    {pythonError 
+                      ? `Error: ${pythonError}. Please ensure the Python AI service is running on port 8000.`
+                      : 'Please ensure the Python AI service is running on port 8000. The metrics will update once connected.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-3 bg-white rounded-lg">
+              <p className="text-sm text-gray-600 mb-1">Reps</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {pythonMetrics && typeof pythonMetrics.reps === 'number' ? pythonMetrics.reps : 0}
+              </p>
+              {!isPythonConnected && (
+                <p className="text-xs text-gray-400 mt-1">Not connected</p>
+              )}
+            </div>
+            
+            <div className="p-3 bg-white rounded-lg">
+              <p className="text-sm text-gray-600 mb-1">Quality Score</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {pythonMetrics && typeof pythonMetrics.quality_score === 'number' 
+                  ? pythonMetrics.quality_score.toFixed(1) 
+                  : '--'}
+              </p>
+              {!isPythonConnected && (
+                <p className="text-xs text-gray-400 mt-1">Not connected</p>
+              )}
+            </div>
+            
+            <div className="p-3 bg-white rounded-lg">
+              <p className="text-sm text-gray-600 mb-1">State</p>
+              <p className="text-lg font-semibold text-gray-900 capitalize">
+                {pythonMetrics?.state || (isPythonConnected ? 'waiting' : 'disconnected')}
+              </p>
+              {!isPythonConnected && (
+                <p className="text-xs text-gray-400 mt-1">WebSocket offline</p>
+              )}
+            </div>
+            
+            <div className="p-3 bg-white rounded-lg">
+              <p className="text-sm text-gray-600 mb-1">Form Valid</p>
+              <p className={`text-lg font-semibold ${
+                pythonMetrics && typeof pythonMetrics.is_valid_form === 'boolean' && pythonMetrics.is_valid_form
+                  ? 'text-green-600' 
+                  : pythonMetrics && typeof pythonMetrics.is_valid_form === 'boolean'
+                  ? 'text-red-600'
+                  : 'text-gray-500'
+              }`}>
+                {pythonMetrics && typeof pythonMetrics.is_valid_form === 'boolean'
+                  ? (pythonMetrics.is_valid_form ? 'Yes' : 'No')
+                  : '--'}
+              </p>
+              {!isPythonConnected && (
+                <p className="text-xs text-gray-400 mt-1">Not connected</p>
+              )}
+            </div>
+          </div>
+
+          {/* Form Errors - Giống FitnessAIDemo */}
+          {pythonMetrics && Array.isArray(pythonMetrics.form_errors) && pythonMetrics.form_errors.length > 0 && (
+            <div className="mt-4">
+              <p className="text-sm font-semibold text-gray-700 mb-2">Form Errors:</p>
+              <ul className="space-y-1">
+                {pythonMetrics.form_errors.map((error: any, idx: number) => (
+                  <li
+                    key={idx}
+                    className={`text-sm p-2 rounded ${
+                      error.severity === 'error'
+                        ? 'bg-red-100 text-red-700'
+                        : error.severity === 'warning'
+                        ? 'bg-yellow-100 text-yellow-700'
+                        : 'bg-blue-100 text-blue-700'
+                    }`}
+                  >
+                    {error.message || (typeof error === 'string' ? error : 'Form issue detected')}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Angles - Giống FitnessAIDemo */}
+          {(() => {
+            // Debug angles data
+            console.log('🔍 [AIRepCounter] ========== ANGLES DEBUG ==========');
+            console.log('🔍 [AIRepCounter] pythonMetrics:', pythonMetrics);
+            console.log('🔍 [AIRepCounter] pythonMetrics?.angles:', pythonMetrics?.angles);
+            console.log('🔍 [AIRepCounter] typeof pythonMetrics?.angles:', typeof pythonMetrics?.angles);
+            console.log('🔍 [AIRepCounter] pythonMetrics?.angles is null?', pythonMetrics?.angles === null);
+            console.log('🔍 [AIRepCounter] pythonMetrics?.angles is undefined?', pythonMetrics?.angles === undefined);
+            if (pythonMetrics?.angles) {
+              console.log('🔍 [AIRepCounter] Object.keys(pythonMetrics.angles):', Object.keys(pythonMetrics.angles));
+              console.log('🔍 [AIRepCounter] Object.keys(pythonMetrics.angles).length:', Object.keys(pythonMetrics.angles).length);
+              console.log('🔍 [AIRepCounter] Object.keys(pythonMetrics.angles).length > 0?', Object.keys(pythonMetrics.angles).length > 0);
+              console.log('🔍 [AIRepCounter] pythonMetrics.angles full object:', JSON.stringify(pythonMetrics.angles, null, 2));
+            } else {
+              console.log('🔍 [AIRepCounter] pythonMetrics.angles is falsy, cannot check keys');
+            }
+            console.log('🔍 [AIRepCounter] Condition check:', {
+              hasPythonMetrics: !!pythonMetrics,
+              hasAngles: !!pythonMetrics?.angles,
+              anglesType: typeof pythonMetrics?.angles,
+              isObject: typeof pythonMetrics?.angles === 'object',
+              keysLength: pythonMetrics?.angles ? Object.keys(pythonMetrics.angles).length : 0,
+              willRender: pythonMetrics && pythonMetrics.angles && Object.keys(pythonMetrics.angles).length > 0,
+            });
+            console.log('🔍 [AIRepCounter] ===========================================');
+            
+            const hasAngles = pythonMetrics && 
+                             pythonMetrics.angles && 
+                             typeof pythonMetrics.angles === 'object' && 
+                             Object.keys(pythonMetrics.angles).length > 0;
+            
+            return hasAngles ? (
+              <div className="mt-4">
+                <p className="text-sm font-semibold text-gray-700 mb-2">Angles:</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries(pythonMetrics.angles).map(([key, value]) => (
+                    <div key={key} className="text-sm">
+                      <span className="font-medium">{key}:</span>{' '}
+                      <span className="text-gray-600">
+                        {typeof value === 'number' ? value.toFixed(1) : value}°
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 p-2 bg-gray-50 rounded text-xs text-gray-500">
+                No angles data available
+                {!pythonMetrics && ' (no metrics)'}
+                {pythonMetrics && !pythonMetrics.angles && ' (angles is missing)'}
+                {pythonMetrics?.angles === null && ' (angles is null)'}
+                {pythonMetrics?.angles === undefined && ' (angles is undefined)'}
+                {pythonMetrics?.angles && Object.keys(pythonMetrics.angles).length === 0 && ' (angles object is empty)'}
+              </div>
+            );
+          })()}
+        </div>
 
         {/* Error Messages */}
         {(error || pythonError) && (

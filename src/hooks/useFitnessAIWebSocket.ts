@@ -28,24 +28,34 @@ export const useFitnessAIWebSocket = (): UseFitnessAIWebSocketReturn => {
   const wsRef = useRef<WebSocket | null>(null);
   const exerciseTypeRef = useRef<ExerciseType | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // ✅ FIX Lỗi 6: Limit auto-reconnect attempts
+  const reconnectAttemptsRef = useRef(0);
+  const MAX_RECONNECT_ATTEMPTS = 5;
 
   const connect = useCallback((exerciseType: ExerciseType) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      console.log('WebSocket already connected');
       return;
     }
 
     try {
+      // ✅ FIX Lỗi 7: Clear reconnect timeout before connecting
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      
       exerciseTypeRef.current = exerciseType;
       const wsUrl = `${FITNESS_AI_WS_URL}/ws/exercise/${exerciseType}`;
-      console.log('Connecting to WebSocket:', wsUrl);
       
+      console.log('🔌 [WebSocket] Connecting to:', wsUrl);
       const ws = new WebSocket(wsUrl);
       
       ws.onopen = () => {
-        console.log('WebSocket connected');
+        console.log('✅ [WebSocket] Connected successfully to:', wsUrl);
         setIsConnected(true);
         setError(null);
+        // ✅ FIX Lỗi 6: Reset reconnect attempts on successful connection
+        reconnectAttemptsRef.current = 0;
         if (reconnectTimeoutRef.current) {
           clearTimeout(reconnectTimeoutRef.current);
           reconnectTimeoutRef.current = null;
@@ -55,34 +65,25 @@ export const useFitnessAIWebSocket = (): UseFitnessAIWebSocketReturn => {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          console.log('📨 [WebSocket] ========== MESSAGE RECEIVED ==========');
-          console.log('📨 [WebSocket] Raw message:', event.data);
-          console.log('📨 [WebSocket] Parsed data:', JSON.stringify(data, null, 2));
           
           if (data.success && data.data) {
             // Validate metrics data before setting
             const metrics = data.data;
-            console.log('📨 [WebSocket] Metrics received:', JSON.stringify(metrics, null, 2));
-            console.log('📨 [WebSocket] Metrics validation:', {
-              hasMetrics: !!metrics,
-              hasReps: typeof metrics.reps === 'number',
-              reps: metrics.reps,
-              hasQualityScore: typeof metrics.quality_score === 'number',
-              qualityScore: metrics.quality_score,
-            });
             
             if (metrics && typeof metrics.reps === 'number') {
-              console.log('✅ [WebSocket] Setting metrics state with:', JSON.stringify(metrics, null, 2));
+              // Log every 10th message to avoid spam
+              if (Math.random() < 0.1) {
+                console.log('📥 [WebSocket] Received metrics:', { reps: metrics.reps, state: metrics.state, quality: metrics.quality });
+              }
               setMetrics(metrics);
               setIsProcessing(false);
               setError(null);
-              console.log('✅ [WebSocket] Metrics state updated successfully');
             } else {
               console.warn('⚠️ [WebSocket] Invalid metrics data:', metrics);
               setError('Invalid metrics received from AI service');
             }
           } else if (data.error) {
-            console.error('❌ [WebSocket] Error in message:', data.error);
+            console.error('❌ [WebSocket] Error:', data.error);
             setError(data.error);
             setIsProcessing(false);
             // Don't clear metrics on error, keep last valid state
@@ -103,18 +104,22 @@ export const useFitnessAIWebSocket = (): UseFitnessAIWebSocketReturn => {
       };
 
       ws.onclose = () => {
-        console.log('WebSocket disconnected');
         setIsConnected(false);
         setIsProcessing(false);
-        // Don't clear metrics on disconnect, keep last valid state
-        // setMetrics(null); // Commented out to keep last metrics
+        // ✅ FIX Lỗi 8: Reset metrics on disconnect to avoid stale data
+        setMetrics(null);
         
-        // Auto-reconnect after 3 seconds
-        if (exerciseTypeRef.current) {
+        // ✅ FIX Lỗi 6 & 10: Auto-reconnect with limit and null check
+        if (exerciseTypeRef.current && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+          reconnectAttemptsRef.current += 1;
           reconnectTimeoutRef.current = setTimeout(() => {
-            console.log('Attempting to reconnect...');
-            connect(exerciseTypeRef.current!);
+            if (exerciseTypeRef.current) {
+              connect(exerciseTypeRef.current);
+            }
           }, 3000);
+        } else if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+          console.error('Max reconnect attempts reached. Please reconnect manually.');
+          setError('Connection lost. Max reconnect attempts reached.');
         }
       };
 
@@ -141,49 +146,61 @@ export const useFitnessAIWebSocket = (): UseFitnessAIWebSocketReturn => {
 
     try {
       setIsProcessing(true);
+      
+      // Check if video source is blob URL (which may cause CORS issues)
+      const isBlobUrl = video.src && video.src.startsWith('blob:');
+      if (isBlobUrl) {
+        // For blob URLs, ensure crossOrigin is set (though it may not help)
+        if (video.crossOrigin !== 'anonymous' && video.crossOrigin !== 'use-credentials') {
+          console.warn('⚠️ [sendFrame] Video from blob URL without crossOrigin, may cause CORS error');
+        }
+      }
+      
       const base64Image = videoFrameToBase64(video);
       
-      // Remove data URL prefix
-      const base64Data = base64Image.split(',')[1];
+      // ✅ FIX Lỗi 9: Safe base64 split with validation
+      const base64Data = base64Image.includes(',') 
+        ? base64Image.split(',')[1] 
+        : base64Image;
       
-      const message = {
-        frame: base64Data.substring(0, 50) + '...', // Log first 50 chars only
+      if (!base64Data || base64Data.length === 0) {
+        throw new Error('Invalid base64 image data');
+      }
+      
+      const frameData = {
+        frame: base64Data,
         timestamp: Date.now() / 1000,
         exercise_type: exerciseTypeRef.current,
       };
-
-      console.log('📤 [sendFrame] ========== SENDING FRAME ==========');
-      console.log('📤 [sendFrame] Video info:', {
-        currentTime: video.currentTime,
-        duration: video.duration,
-        paused: video.paused,
-        readyState: video.readyState,
-      });
-      console.log('📤 [sendFrame] Message:', {
-        ...message,
-        frameLength: base64Data.length,
-        exerciseType: exerciseTypeRef.current,
-      });
       
-      wsRef.current.send(JSON.stringify({
-        frame: base64Data,
-        timestamp: message.timestamp,
-        exercise_type: message.exercise_type,
-      }));
-      
-      console.log('✅ [sendFrame] Frame sent successfully');
+      wsRef.current.send(JSON.stringify(frameData));
+      // Log every 10th frame to avoid spam
+      if (Math.random() < 0.1) {
+        console.log('📤 [sendFrame] Frame sent, exercise_type:', exerciseTypeRef.current, 'timestamp:', frameData.timestamp);
+      }
     } catch (err: any) {
-      console.error('❌ [sendFrame] Error sending frame:', err);
-      setError(err.message || 'Failed to send frame');
+      // Handle CORS errors specifically
+      if (err.message && err.message.includes('Tainted') || err.message.includes('CORS')) {
+        console.error('❌ [sendFrame] CORS error - Video may be from different origin:', err.message);
+        console.error('💡 [sendFrame] Solution: Ensure video server has CORS headers or use same-origin video');
+        setError('CORS error: Video must be from same origin or have proper CORS headers');
+      } else {
+        console.error('❌ [sendFrame] Error sending frame:', err);
+        setError(err.message || 'Failed to send frame');
+      }
       setIsProcessing(false);
     }
   }, []);
 
   const disconnect = useCallback(() => {
+    // ✅ FIX Lỗi 7: Clear reconnect timeout
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
+    
+    // ✅ FIX Lỗi 6: Reset reconnect attempts
+    reconnectAttemptsRef.current = 0;
     
     if (wsRef.current) {
       wsRef.current.close();
@@ -193,7 +210,8 @@ export const useFitnessAIWebSocket = (): UseFitnessAIWebSocketReturn => {
     setIsConnected(false);
     setIsProcessing(false);
     exerciseTypeRef.current = null;
-    // Keep metrics on disconnect, only clear on explicit reset
+    // ✅ FIX Lỗi 8: Reset metrics on explicit disconnect
+    setMetrics(null);
   }, []);
 
   const reset = useCallback(async () => {
@@ -204,10 +222,8 @@ export const useFitnessAIWebSocket = (): UseFitnessAIWebSocketReturn => {
     // Call REST API to reset counter instead of WebSocket
     if (exerciseTypeRef.current) {
       try {
-        const result = await resetCounter(exerciseTypeRef.current);
-        console.log('Reset counter request sent to Python AI service:', result);
+        await resetCounter(exerciseTypeRef.current);
       } catch (err) {
-        console.warn('Error calling reset API (continuing with local reset):', err);
         // Continue with local reset even if API call fails
       }
     }
