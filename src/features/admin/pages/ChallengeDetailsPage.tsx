@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { SimpleButton as Button } from "@/components/ui/simple-button";
 import { ArrowLeft, Play, Loader, TrendingUp, Clock, AlertCircle, BarChart3, Filter } from "lucide-react";
 import { AdminChallenge } from "../types/admin-entities";
+import { getVideoUrl, getImageUrl } from "@/utils/fileUrl";
 
 interface UserSubmission {
   id: number;
@@ -123,7 +124,7 @@ const MOCK_AI_LOGS: AILogEntry[] = [
   },
 ];
 
-const baseURL = "http://localhost:8080/";
+// baseURL removed - using getVideoUrl/getImageUrl utility functions instead
 
 export function ChallengeDetailsPage({ challenge, onBack }: ChallengeDetailsPageProps) {
   const [activeTab, setActiveTab] = useState<TabId>("info");
@@ -264,11 +265,10 @@ export function ChallengeDetailsPage({ challenge, onBack }: ChallengeDetailsPage
               <div>
                 <h3 className="text-lg font-bold text-gray-900 mb-4">Sample Video</h3>
                 {challenge.linkVideos ? (
-                  <video
-                    controls
-                    className="w-full rounded-lg bg-black"
+                  <VideoWithPresignedUrl
                     src={challenge.linkVideos}
-                    style={{ maxHeight: "300px" }}
+                    className="w-full rounded-lg bg-black"
+                    controls
                   />
                 ) : (
                   <div className="w-full h-64 bg-gray-200 rounded-lg flex items-center justify-center">

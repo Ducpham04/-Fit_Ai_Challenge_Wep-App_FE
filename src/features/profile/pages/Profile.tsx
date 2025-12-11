@@ -7,6 +7,7 @@ import { getUserFullProfile } from "../api/profileService";
 import { ProfileDTO } from "../userProfile.type";
 import { UserInfoAPI, UserInfoDTO } from "../../../api/userInfo.api";
 import { Button } from "../../../components/ui/button";
+import { useAvatarUrl } from "../../../hooks/useFileUrl";
 
 export const Profile = () => {
   const { user: authUser } = useAuth();
@@ -68,24 +69,29 @@ export const Profile = () => {
   if (!profile) return <p className="text-center mt-10">No profile data</p>;
 
   const { profile: user, stats, activity, goals } = profile;
+  
+  // Lấy avatar URL với presigned URL
+  const avatarUrl = useAvatarUrl(user.avatar);
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-lime-50/50 py-8">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* HEADER */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-xl shadow-md overflow-hidden mb-8"
+          className="bg-white rounded-2xl shadow-xl overflow-hidden mb-8 border border-gray-100"
         >
-          <div className="h-32 bg-gradient-to-r from-sky-400 to-lime-400" />
+          <div className="h-32 bg-gradient-to-r from-sky-400 via-sky-500 to-lime-400 relative overflow-hidden">
+            <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9IjAuMSI+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMiIvPjwvZz48L2c+PC9zdmc+')] opacity-20"></div>
+          </div>
 
           <div className="px-8 pb-8">
             <div className="flex flex-col md:flex-row items-center gap-6 -mt-16">
 
               <img
-                src={"http://localhost:8080/" + user.avatar}
+                src={avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`}
                 alt={user.username}
                 className="w-32 h-32 rounded-full border-4 border-white shadow-lg"
               />
@@ -130,8 +136,19 @@ export const Profile = () => {
             </div>
 
             {/* Activity */}
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <h2 className="text-2xl text-gray-900 mb-6">Activity Summary</h2>
+            <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+              <h2 
+                className="text-2xl font-bold mb-6"
+                style={{
+                  background: 'linear-gradient(to right, #0284c7, #65a30d)',
+                  WebkitBackgroundClip: 'text',
+                  backgroundClip: 'text',
+                  color: 'transparent',
+                  WebkitTextFillColor: 'transparent'
+                }}
+              >
+                Activity Summary
+              </h2>
 
               <div className="grid md:grid-cols-3 gap-6">
                 <ActivityBox value={activity.totalCaloriesBurned} label="Calories Burned" />
@@ -144,10 +161,23 @@ export const Profile = () => {
           {/* RIGHT COLUMN */}
           <div className="space-y-6">
             {/* Body Information */}
-            <div className="bg-white rounded-xl shadow-md p-6">
+            <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
               <div className="flex items-center gap-2 mb-4">
-                <Scale className="w-6 h-6 text-sky-500" />
-                <h2 className="text-xl text-gray-900">Body Information</h2>
+                <div className="p-2 bg-gradient-to-r from-sky-100 to-lime-100 rounded-lg">
+                  <Scale className="w-6 h-6 text-sky-600" />
+                </div>
+                <h2 
+                  className="text-xl font-bold"
+                  style={{
+                    background: 'linear-gradient(to right, #0284c7, #65a30d)',
+                    WebkitBackgroundClip: 'text',
+                    backgroundClip: 'text',
+                    color: 'transparent',
+                    WebkitTextFillColor: 'transparent'
+                  }}
+                >
+                  Body Information
+                </h2>
               </div>
 
               {userInfo ? (
@@ -222,10 +252,23 @@ export const Profile = () => {
             </div>
 
             {/* Goals */}
-            <div className="bg-white rounded-xl shadow-md p-6">
+            <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
               <div className="flex items-center gap-2 mb-4">
-                <Target className="w-6 h-6 text-sky-500" />
-                <h2 className="text-xl text-gray-900">My Goals</h2>
+                <div className="p-2 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg">
+                  <Target className="w-6 h-6 text-purple-600" />
+                </div>
+                <h2 
+                  className="text-xl font-bold"
+                  style={{
+                    background: 'linear-gradient(to right, #0284c7, #65a30d)',
+                    WebkitBackgroundClip: 'text',
+                    backgroundClip: 'text',
+                    color: 'transparent',
+                    WebkitTextFillColor: 'transparent'
+                  }}
+                >
+                  My Goals
+                </h2>
               </div>
 
               {goals && (goals.weeklyWorkouts !== null || goals.dailyCalories !== null || goals.goalName) ? (
@@ -334,12 +377,12 @@ const StatCard = ({ icon, value, label, color }: StatCardProps) => {
 
   const bg = bgColors[color];
   return (
-    <div className="bg-white rounded-xl shadow-md p-6 text-center">
-      <div className={`inline-block p-3 bg-gradient-to-br ${bg} rounded-lg mb-3 text-white`}>
+    <div className="bg-white rounded-2xl shadow-lg p-6 text-center border border-gray-100 hover:shadow-xl transition-shadow duration-300 hover:-translate-y-1 transform">
+      <div className={`inline-block p-3 bg-gradient-to-br ${bg} rounded-xl mb-3 text-white shadow-md`}>
         {icon}
       </div>
-      <p className="text-2xl text-gray-900 mb-1">{value}</p>
-      <p className="text-sm text-gray-600">{label}</p>
+      <p className="text-2xl font-bold text-gray-900 mb-1">{value}</p>
+      <p className="text-sm text-gray-600 font-medium">{label}</p>
     </div>
   );
 };

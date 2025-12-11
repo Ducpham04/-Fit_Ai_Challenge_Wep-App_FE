@@ -9,6 +9,7 @@ import { SimpleTextarea as Textarea } from "@/components/ui/simple-textarea";
 import { goalAPI } from "../api/adminAPI";
 import { AdminGoal, GoalPayload } from "../types/admin-entities";
 import { extractDataFromResponse } from "../utils/responseHelper";
+import { ImageWithPresignedUrl } from "@/components/common/ImageWithPresignedUrl";
 
 // Mock associations
 const MOCK_ASSOCIATIONS: Record<number, any> = {
@@ -34,7 +35,7 @@ const DEFAULT_FORM: GoalPayload = {
   imageFile: null,
 };
 
-const baseURL = "http://localhost:8080/";
+// baseURL removed - using ImageWithPresignedUrl component instead
 
 type ModalMode = "create" | "edit" | "detail";
 
@@ -138,7 +139,7 @@ export function GoalsPage() {
     });
     setError(null);
     // Set image preview if imageLink exists
-    setImagePreview(goal.imageLink ? `${baseURL}${goal.imageLink}` : null);
+    setImagePreview(goal.imageLink || null);
     setModalState({ open: true, mode: "edit", goal });
   };
 
@@ -424,13 +425,10 @@ export function GoalsPage() {
                 {goal.imageLink && (
                   <div className="relative w-full h-32 overflow-hidden bg-gradient-to-br from-purple-100 to-blue-100">
                     <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent z-10" />
-                    <img
-                      src={goal.imageLink.startsWith('http') ? goal.imageLink : `${baseURL}${goal.imageLink}`}
+                    <ImageWithPresignedUrl
+                      src={goal.imageLink}
                       alt={goal.name || goal.title || 'Goal image'}
                       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
                     />
                   </div>
                 )}
@@ -572,13 +570,10 @@ export function GoalsPage() {
             {modalState.goal.imageLink && (
               <div className="relative w-full h-40 overflow-hidden bg-gradient-to-br from-purple-100 to-blue-100 rounded-xl border-2 border-purple-200 shadow-lg">
                 <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent z-10" />
-                <img
-                  src={modalState.goal.imageLink.startsWith('http') ? modalState.goal.imageLink : `${baseURL}${modalState.goal.imageLink}`}
+                <ImageWithPresignedUrl
+                  src={modalState.goal.imageLink}
                   alt={modalState.goal.name || modalState.goal.title || 'Goal image'}
                   className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
                 />
               </div>
             )}
@@ -735,7 +730,7 @@ export function GoalsPage() {
                   setForm((prev) => ({ ...prev, imageLink: link }));
                   // Update preview if it's a valid URL
                   if (link && !form.imageFile) {
-                    setImagePreview(link.startsWith('http') ? link : `${baseURL}${link}`);
+                    setImagePreview(link);
                   } else if (!link && !form.imageFile) {
                     setImagePreview(null);
                   }
@@ -789,7 +784,7 @@ export function GoalsPage() {
                         setForm((prev) => ({ ...prev, imageFile: null }));
                         // Reset preview to imageLink if exists
                         if (form.imageLink) {
-                          setImagePreview(form.imageLink.startsWith('http') ? form.imageLink : `${baseURL}${form.imageLink}`);
+                          setImagePreview(form.imageLink);
                         } else {
                           setImagePreview(null);
                         }

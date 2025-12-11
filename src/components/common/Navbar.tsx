@@ -3,11 +3,13 @@ import { Menu, X, Dumbbell, User, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
+import { useAvatarUrl } from '../../hooks/useFileUrl';
 
 export const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
   const { isAuthenticated, logout, user } = useAuth();
+  const avatarUrl = useAvatarUrl(user?.linkImage || user?.profileImage);
 
   const navLinks = [
     { name: 'Home', path: '/' },
@@ -63,7 +65,7 @@ export const Navbar = () => {
                 >
                   {user?.linkImage || user?.profileImage ? (
                     <img
-                      src={user.linkImage?.startsWith('http') ? user.linkImage : `http://localhost:8080/${user.linkImage || user.profileImage}`}
+                      src={avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.fullName || 'User'}`}
                       alt={user?.fullName || 'User'}
                       className="w-8 h-8 rounded-full object-cover border-2 border-gray-200"
                       onError={(e) => {
@@ -151,7 +153,7 @@ export const Navbar = () => {
                   >
                     {user?.linkImage || user?.profileImage ? (
                       <img
-                        src={user.linkImage?.startsWith('http') ? user.linkImage : `http://localhost:8080/${user.linkImage || user.profileImage}`}
+                        src={avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.fullName || 'User'}`}
                         alt={user?.fullName || 'User'}
                         className="w-8 h-8 rounded-full object-cover border-2 border-gray-200"
                         onError={(e) => {

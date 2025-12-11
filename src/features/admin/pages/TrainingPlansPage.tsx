@@ -13,6 +13,7 @@ import {
 } from "../types/admin-entities";
 import { TrainingPlanDetailsPage } from "./TrainingPlanDetailsPage";
 import { extractDataFromResponse, isResponseSuccess, getErrorMessage } from "../utils/responseHelper";
+import { useImageUrl } from "@/hooks/useFileUrl";
 
 const EMPTY_PLAN: TrainingPlanPayload & { description?: string } = {
   title: "",
@@ -369,27 +370,19 @@ export function TrainingPlansPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filtered.map((plan) => {
-                const baseURL = "http://localhost:8080/";
-                const imageUrl = plan.linkImage 
-                  ? (plan.linkImage.startsWith('http') ? plan.linkImage : `${baseURL}${plan.linkImage}`)
-                  : null;
-                
                 return (
                   <div
                     key={plan.id}
                     className="bg-white rounded-2xl shadow-lg border-2 border-gray-100 hover:border-sky-300 hover:shadow-2xl transition-all duration-300 overflow-hidden group transform hover:-translate-y-1"
                   >
                     {/* Goal Image */}
-                    {imageUrl && (
+                    {plan.linkImage && (
                       <div className="relative w-full h-48 overflow-hidden bg-gradient-to-br from-sky-100 to-blue-100">
                         <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent z-10" />
-                        <img
-                          src={imageUrl}
+                        <TrainingPlanImage
+                          src={plan.linkImage}
                           alt={plan.goalName || plan.title}
                           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
                         />
                         {/* Goal Badge */}
                         {plan.goalName && (

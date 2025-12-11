@@ -72,7 +72,7 @@ export const Leaderboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-lime-50/50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <motion.div
@@ -80,7 +80,7 @@ export const Leaderboard = () => {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-8"
         >
-          <h1 className="text-4xl text-gray-900 mb-2">Global Leaderboard</h1>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-sky-600 to-lime-600 bg-clip-text text-transparent mb-2">Global Leaderboard</h1>
           <p className="text-xl text-gray-600 mb-4">
             Top athletes ranked by {getCategoryLabel(category)}
           </p>
@@ -230,7 +230,7 @@ export const Leaderboard = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-white rounded-xl shadow-md overflow-hidden"
+          className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100"
         >
           <div className="overflow-x-auto">
             <table className="w-full">

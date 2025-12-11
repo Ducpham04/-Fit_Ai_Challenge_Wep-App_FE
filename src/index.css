@@ -1232,6 +1232,7 @@
 
   .bg-clip-text {
     background-clip: text;
+    -webkit-background-clip: text;
   }
 
   .object-cover {
@@ -1458,7 +1459,8 @@
   }
 
   .text-transparent {
-    color: #0000;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
   }
 
   .text-white {
