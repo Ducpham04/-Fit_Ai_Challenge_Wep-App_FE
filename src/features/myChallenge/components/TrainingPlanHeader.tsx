@@ -35,13 +35,13 @@ export const TrainingPlanHeader: React.FC<TrainingPlanHeaderProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6 shadow-sm">
+    <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-6 shadow-lg">
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">{planName}</h1>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-sky-600 to-lime-600 bg-clip-text text-transparent mb-2">{planName}</h1>
           <p className="text-gray-600">{description}</p>
         </div>
-        <span className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${getDifficultyColor(difficulty)}`}>
+        <span className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap shadow-md ${getDifficultyColor(difficulty)}`}>
           {difficulty}
         </span>
       </div>
@@ -65,9 +65,9 @@ export const TrainingPlanHeader: React.FC<TrainingPlanHeaderProps> = ({
           <span className="text-sm font-medium text-gray-700">Progress</span>
           <span className="text-sm font-bold text-gray-900">{progressPercentage}%</span>
         </div>
-        <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden relative">
+        <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden relative shadow-inner">
           <div
-            className="bg-gradient-to-r from-blue-500 to-blue-600 h-full transition-all duration-500 ease-out rounded-full"
+            className="bg-gradient-to-r from-sky-500 via-sky-600 to-lime-500 h-full transition-all duration-500 ease-out rounded-full shadow-md"
             style={{ 
               width: `${Math.max(0, Math.min(100, progressPercentage))}%`,
               minWidth: progressPercentage > 0 ? '2px' : '0px'

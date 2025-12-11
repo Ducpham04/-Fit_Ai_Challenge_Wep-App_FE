@@ -10,6 +10,7 @@ import { challengeAPI } from "../api/adminAPI";
 import { AdminChallenge, ChallengePayload } from "../types/admin-entities";
 import { ChallengeDetailsPage } from "./ChallengeDetailsPage";
 import { extractDataFromResponse, isResponseSuccess, getErrorMessage } from "../utils/responseHelper";
+import { VideoWithPresignedUrl } from "@/components/common/VideoWithPresignedUrl";
 
 const DEFAULT_FORM: ChallengePayload = {
   title: "",
@@ -23,7 +24,6 @@ const DEFAULT_FORM: ChallengePayload = {
 };
 
 type ModalMode = "create" | "edit";
-const baseURL = "http://localhost:8080/";
 
 // Debounce hook
 function useDebounce<T>(value: T, delay: number): T {
@@ -132,7 +132,7 @@ export function ChallengesPage() {
     setForm({ ...rest, videoFile: null });
     
     // Set preview cho video hiện có
-    setVideoPreview(challenge.linkVideos ? baseURL + challenge.linkVideos : null);
+    setVideoPreview(challenge.linkVideos || null);
     setError(null);
     setModalState({ open: true, mode: "edit", challenge });
   };
@@ -492,19 +492,12 @@ export function ChallengesPage() {
                     <td className="px-6 py-4">
                       {challenge.linkVideos ? (
                         <div className="relative group">
-                          <video
-                            width={160}
-                            height={90}
+                          <VideoWithPresignedUrl
+                            src={challenge.linkVideos}
                             className="rounded-lg border border-gray-200"
-                            preload="metadata"
-                          >
-                            <source
-                              src={baseURL + challenge.linkVideos}
-                              type="video/mp4"
-                            />
-                            Trình duyệt của bạn không hỗ trợ thẻ video.
-                          </video>
-                          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all rounded-lg flex items-center justify-center">
+                            controls
+                          />
+                          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all rounded-lg flex items-center justify-center pointer-events-none">
                             <span className="text-white text-xs opacity-0 group-hover:opacity-100">
                               Click để xem
                             </span>

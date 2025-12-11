@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getTrainingPlanDetail, updateChallengeStatus, getPersonalizedDayDetails, completeChallenge, saveDailyTrainingLog, regeneratePersonalizedPlanDetails } from '../api/myChallengeService';
+import { getTrainingPlanDetail, updateChallengeStatus, getPersonalizedDayDetails, completeChallenge, saveDailyTrainingLog, regeneratePersonalizedPlanDetails, getCurrentTrainingPlans } from '../api/myChallengeService';
 import { TrainingPlanDetail, Challenge } from '../types/myChallenge.type';
 import { TrainingPlanHeader } from '../components/TrainingPlanHeader';
 import { DayTabs } from '../components/DayTabs';
 import { ChallengeCard } from '../components/ChallengeCard';
 import { ChallengeDetailExpanded } from '../components/ChallengeDetailExpanded';
+import { useAuth } from '@/context/AuthContext';
 
 interface TrainingPlanDetailPageProps {
   trainingPlanId: string | number;
@@ -21,6 +22,7 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
   onBack,
   utId,
 }) => {
+  const { user } = useAuth();
   const [plan, setPlan] = useState<TrainingPlanDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +30,7 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
   const [selectedChallenge, setSelectedChallenge] = useState<Challenge | null>(null);
   const [expandedChallengeId, setExpandedChallengeId] = useState<number | null>(null); // Track expanded challenge
   const [personalizedData, setPersonalizedData] = useState<Map<number, any>>(new Map());
+  const [planStartDate, setPlanStartDate] = useState<string | undefined>(undefined); // ✅ FIX: Lưu startDate từ UserTraining
   
   // Refs để tránh infinite loop
   const planLoadedRef = useRef(false);
@@ -64,6 +67,20 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
         dayChallengesCount: data?.dayChallenges?.length,
       });
       
+      // ✅ FIX: Lấy startDate từ UserTraining nếu có utId
+      if (utId && user?.id) {
+        try {
+          const userPlans = await getCurrentTrainingPlans(user.id.toString());
+          const userPlan = userPlans.find(p => p.id === utId);
+          if (userPlan?.startDate) {
+            setPlanStartDate(userPlan.startDate);
+            console.log('✅ [TrainingPlanDetailPage] Loaded startDate from UserTraining:', userPlan.startDate);
+          }
+        } catch (err) {
+          console.warn('⚠️ [TrainingPlanDetailPage] Could not load startDate from UserTraining:', err);
+        }
+      }
+      
       // Check if plan has any challenges
       if (!data || data.dayChallenges.length === 0) {
         setError('This training plan has no exercises yet. Please contact admin to add exercises.');
@@ -71,8 +88,9 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
         // Reset personalized data cache khi load plan mới
         personalizedDataLoadedRef.current.clear();
         setPlan(data);
-        setSelectedDay(1);
-        console.log('✅ [TrainingPlanDetailPage] Plan state updated');
+        // ✅ FIX: Không reset selectedDay về 1, giữ lại ngày hiện tại
+        // setSelectedDay(1); // REMOVED: Giữ lại selectedDay hiện tại
+        console.log('✅ [TrainingPlanDetailPage] Plan state updated, selectedDay kept:', selectedDay);
       }
     } catch (err) {
       console.error('❌ [TrainingPlanDetailPage] Error loading training plan:', err);
@@ -458,6 +476,17 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
           saveResult: JSON.stringify(saveResult, null, 2),
         });
         console.log('✅ [TrainingPlanDetailPage] Data persisted to database - will remain after reload');
+        
+        // ✅ FIX: Dispatch event để dashboard refresh sau khi lưu thành công
+        window.dispatchEvent(new CustomEvent('challengeCompleted', {
+          detail: {
+            challengeId,
+            trainingPlanId: numTrainingPlanId,
+            score: dailyLogData?.score,
+            timestamp: Date.now(),
+          }
+        }));
+        console.log('📢 [TrainingPlanDetailPage] Dispatched challengeCompleted event after saving DailyTrainingLog');
       } catch (dailyLogError) {
         console.error('❌ [TrainingPlanDetailPage] Could not save DailyTrainingLog:', dailyLogError);
         console.error('❌ [TrainingPlanDetailPage] Error details:', {
@@ -499,7 +528,9 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
             }
             
             setPlan(data);
-            console.log('✅ [TrainingPlanDetailPage] Training plan reloaded from backend');
+            // ✅ FIX: Giữ lại selectedDay sau khi reload, không reset về 1
+            // selectedDay được giữ nguyên từ state hiện tại
+            console.log('✅ [TrainingPlanDetailPage] Training plan reloaded from backend, selectedDay kept:', selectedDay);
             
             // ✅ FIX: Reload personalized data để có aiAnalysis đầy đủ
             if (utId && selectedDay) {
@@ -517,6 +548,16 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
       }
 
       console.log('✅ [TrainingPlanDetailPage] handleCompleteChallenge completed successfully');
+      
+      // ✅ FIX: Dispatch event để dashboard refresh
+      window.dispatchEvent(new CustomEvent('challengeCompleted', {
+        detail: {
+          challengeId,
+          trainingPlanId: numTrainingPlanId,
+          score: analysisData?.score,
+        }
+      }));
+      console.log('📢 [TrainingPlanDetailPage] Dispatched challengeCompleted event');
     } catch (error) {
       console.error('❌ [TrainingPlanDetailPage] Error in complete challenge handler:', error);
       // Show error to user
@@ -612,7 +653,7 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
   const currentDayData = plan.dayChallenges.find((d) => d.dayNumber === selectedDay);
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50">
+    <main className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-lime-50/50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <button
           onClick={onBack}
@@ -646,13 +687,15 @@ export const TrainingPlanDetailPage: React.FC<TrainingPlanDetailPageProps> = ({
             dayChallenges={plan.dayChallenges}
             selectedDay={selectedDay}
             onSelectDay={setSelectedDay}
+            startDate={planStartDate || plan.startDate} // ✅ FIX: Pass startDate từ UserTraining hoặc plan
+            utId={utId} // ✅ FIX: Pass utId để check completion
           />
 
           {currentDayData && (
-            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-lg">
               <div className="flex items-center justify-between mb-5">
-                <h2 className="text-2xl font-bold text-gray-900">{currentDayData.dayName}</h2>
-                <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold">
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-sky-600 to-lime-600 bg-clip-text text-transparent">{currentDayData.dayName}</h2>
+                <span className="px-3 py-1 bg-gradient-to-r from-sky-100 to-lime-100 text-sky-800 rounded-full text-xs font-semibold shadow-md">
                   {currentDayData.challenges.length} Challenge{currentDayData.challenges.length !== 1 ? 's' : ''}
                 </span>
               </div>

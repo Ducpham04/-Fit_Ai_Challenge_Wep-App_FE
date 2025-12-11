@@ -49,14 +49,23 @@ export const Dashboard = () => {
     
     loadDashboardData();
     
+    // ✅ FIX: Refresh khi window focus
     const handleFocus = () => {
       loadDashboardData();
     };
     
+    // ✅ FIX: Refresh khi challenge completed (custom event)
+    const handleChallengeCompleted = () => {
+      console.log('🔄 [Dashboard] Challenge completed event received, refreshing...');
+      loadDashboardData();
+    };
+    
     window.addEventListener('focus', handleFocus);
+    window.addEventListener('challengeCompleted', handleChallengeCompleted);
     
     return () => {
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('challengeCompleted', handleChallengeCompleted);
     };
   }, [user?.id]);
   

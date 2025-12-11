@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
+import { ImageWithPresignedUrl } from "@/components/common/ImageWithPresignedUrl";
 import { SimpleButton as Button } from "@/components/ui/simple-button";
 import { Plus, Gift, Search, Filter, AlertCircle, Download, Calendar } from "lucide-react";
 import { SimpleInput as Input } from "@/components/ui/simple-input";
@@ -210,7 +211,7 @@ export function RewardsPage() {
   }
 };
 
-  const APIURL = "http://localhost:8080/"
+  // APIURL removed - using ImageWithPresignedUrl component instead
   const handleDelete = async (id: number) => {
     try {
       setError(null);
@@ -433,16 +434,12 @@ export function RewardsPage() {
                 </span>
               </div>
               <div style={{ width: '100%' , height: 150, overflow: 'hidden' }}>
-  <img
-    src={APIURL + reward.linkImage}
-    alt="ảnh reward"
-    style={{
-      width: '100%%',
-      height: '100%',
-      objectFit: 'cover', // "cover" sẽ cắt vừa khung, "contain" sẽ giữ tỉ lệ ảnh
-    }}
-  />
-</div>
+                <ImageWithPresignedUrl
+                  src={reward.linkImage}
+                  alt="ảnh reward"
+                  className="w-full h-full object-cover"
+                />
+              </div>
 
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">

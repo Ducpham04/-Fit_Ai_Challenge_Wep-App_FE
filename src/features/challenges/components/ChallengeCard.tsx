@@ -1,6 +1,7 @@
 import { Users, Trophy } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
+import { useVideoUrl } from '@/hooks/useFileUrl';
 
 interface ChallengeCardProps {
   id: number;
@@ -38,6 +39,8 @@ export const ChallengeCard = ({
   reward,
   status = 'Active',
 }: ChallengeCardProps) => {
+  const videoUrl = useVideoUrl(videos);
+  
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -48,7 +51,7 @@ export const ChallengeCard = ({
     >
       <div className="relative h-48 overflow-hidden">
        <video
-  src={`http://localhost:8080/${videos}`}
+  src={videoUrl || ''}
   controls
   className="w-full h-full object-cover"
 >

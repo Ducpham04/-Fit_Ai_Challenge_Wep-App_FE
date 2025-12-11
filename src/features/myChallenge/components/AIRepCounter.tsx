@@ -3,6 +3,7 @@ import { Activity, Upload, CheckCircle, AlertCircle, Loader, Download, RotateCcw
 import apiClient from '@/api/client';
 import { useFitnessAIWebSocket } from '@/hooks/useFitnessAIWebSocket';
 import { ExerciseType } from '@/api/fitnessAI.api';
+import { useVideoUrl } from '@/hooks/useFileUrl';
 
 interface AIRepCounterProps {
   targetReps: number;
@@ -74,6 +75,9 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
   } = useFitnessAIWebSocket();
   
   // ✅ ĐỒNG BỘ: Load video từ challenge nếu có và tự động play để quét
+  // Sử dụng hook để lấy presigned URL
+  const videoUrl = useVideoUrl(initialVideoUrl);
+  
   useEffect(() => {
     if (initialVideoUrl && initialVideoUrl !== preview) {
       setPreview(initialVideoUrl);
@@ -88,19 +92,18 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
       
       // Set video source và tự động play sau khi load
       setTimeout(() => {
-        if (videoRef.current) {
-          const videoUrl = initialVideoUrl.startsWith('http') 
-            ? initialVideoUrl 
-            : `http://localhost:8080/${initialVideoUrl}`;
+        if (videoRef.current && videoUrl) {
+          // Sử dụng presigned URL từ hook
+          const finalVideoUrl = videoUrl || initialVideoUrl;
           
           // Set crossOrigin only for server URLs (not blob URLs)
           // Server URLs need CORS headers from backend
-          if (!videoUrl.startsWith('blob:')) {
+          if (!finalVideoUrl.startsWith('blob:')) {
             videoRef.current.crossOrigin = 'anonymous';
           } else {
             videoRef.current.removeAttribute('crossOrigin');
           }
-          videoRef.current.src = videoUrl;
+          videoRef.current.src = finalVideoUrl;
           
           videoRef.current.onloadedmetadata = () => {
             // Đảm bảo WebSocket đã kết nối

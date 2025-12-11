@@ -114,7 +114,18 @@ export const MyTrainingPlans: React.FC<MyTrainingPlansProps> = ({ onSelectPlan, 
           <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <Sparkles className="w-12 h-12 text-blue-600" />
           </div>
-          <h3 className="text-2xl font-bold text-gray-900 mb-2">Chưa có Training Plan</h3>
+          <h3 
+            className="text-2xl font-bold mb-2"
+            style={{
+              background: 'linear-gradient(to right, #0284c7, #65a30d)',
+              WebkitBackgroundClip: 'text',
+              backgroundClip: 'text',
+              color: 'transparent',
+              WebkitTextFillColor: 'transparent'
+            }}
+          >
+            Chưa có Training Plan
+          </h3>
           <p className="text-gray-600 mb-6 max-w-md mx-auto">
             Để bắt đầu hành trình fitness của bạn, hãy điền Health Profile để nhận gợi ý Training Plan phù hợp nhất
           </p>
@@ -141,7 +152,7 @@ export const MyTrainingPlans: React.FC<MyTrainingPlansProps> = ({ onSelectPlan, 
       {plans.map((plan) => (
         <div
           key={plan.id}
-          className="relative bg-gradient-to-br from-white to-gray-50 rounded-xl border border-gray-200 p-6 cursor-pointer hover:shadow-xl hover:border-blue-300 transition-all duration-300 group"
+          className="relative bg-white rounded-2xl border border-gray-100 shadow-lg p-6 cursor-pointer hover:shadow-xl hover:border-sky-300 hover:-translate-y-1 transition-all duration-300 group"
           onClick={() => {
             if (showDeleteConfirm !== plan.id) {
               console.log('Selected Plan:', plan);
@@ -153,7 +164,7 @@ export const MyTrainingPlans: React.FC<MyTrainingPlansProps> = ({ onSelectPlan, 
           {/* Header */}
           <div className="flex items-start justify-between mb-4">
             <div className="flex-1">
-              <h3 className="font-bold text-lg text-gray-900 mb-1 group-hover:text-blue-600 transition-colors">
+              <h3 className="font-bold text-lg text-gray-900 mb-1 group-hover:text-sky-600 transition-colors duration-300">
                 {plan.planName || plan.name}
               </h3>
               <p className="text-xs text-gray-500">Plan #{plan.trainingPlanId || plan.id}</p>

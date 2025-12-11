@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import { AuthAPI } from '../../../api/auth.api';
 import { UploadAPI } from '../../../api/upload.api';
+import { useAvatarUrl } from '../../../hooks/useFileUrl';
 
 export const Settings = () => {
   const { user: authUser, refreshUser } = useAuth();
@@ -18,6 +19,7 @@ export const Settings = () => {
   const [avatar, setAvatar] = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const avatarUrl = useAvatarUrl(avatarPreview);
   
   // Settings
   const [notifications, setNotifications] = useState(true);
@@ -124,7 +126,7 @@ export const Settings = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-lime-50/50 py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <motion.div
@@ -132,7 +134,7 @@ export const Settings = () => {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="text-4xl text-gray-900 mb-2">Settings</h1>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-sky-600 to-lime-600 bg-clip-text text-transparent mb-2">Settings</h1>
           <p className="text-xl text-gray-600">Manage your account preferences</p>
         </motion.div>
 
@@ -142,7 +144,7 @@ export const Settings = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="bg-white rounded-xl shadow-md p-6"
+            className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100"
           >
             <div className="flex items-center gap-3 mb-6">
               <User className="w-6 h-6 text-sky-500" />
@@ -162,7 +164,7 @@ export const Settings = () => {
                   <div className="flex items-center gap-4">
                     <div className="relative">
                       <img
-                        src={avatarPreview ? (avatarPreview.startsWith('http') ? avatarPreview : `http://localhost:8080/${avatarPreview}`) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName || email}`}
+                        src={avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName || email}`}
                         alt="Avatar"
                         className="w-24 h-24 rounded-full border-4 border-gray-200 object-cover"
                       />
@@ -251,7 +253,7 @@ export const Settings = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="bg-white rounded-xl shadow-md p-6"
+            className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100"
           >
             <div className="flex items-center gap-3 mb-6">
               <Bell className="w-6 h-6 text-sky-500" />
@@ -305,7 +307,7 @@ export const Settings = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="bg-white rounded-xl shadow-md p-6"
+            className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100"
           >
             <div className="flex items-center gap-3 mb-6">
               <Moon className="w-6 h-6 text-sky-500" />
@@ -339,7 +341,7 @@ export const Settings = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
-            className="bg-white rounded-xl shadow-md p-6"
+            className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100"
           >
             <div className="flex items-center gap-3 mb-6">
               <Globe className="w-6 h-6 text-sky-500" />
@@ -364,7 +366,7 @@ export const Settings = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
-            className="bg-white rounded-xl shadow-md p-6"
+            className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100"
           >
             <div className="flex items-center gap-3 mb-6">
               <Shield className="w-6 h-6 text-sky-500" />

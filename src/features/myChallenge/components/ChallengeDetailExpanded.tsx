@@ -30,7 +30,8 @@ export const ChallengeDetailExpanded: React.FC<ChallengeDetailExpandedProps> = (
   const [useWebSocket, setUseWebSocket] = useState(true); // Default to WebSocket for real-time
   const [autoAnalyze, setAutoAnalyze] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error' | 'warning'>('idle');
+  const [saveMessage, setSaveMessage] = useState<string>('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const restIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -223,7 +224,17 @@ export const ChallengeDetailExpanded: React.FC<ChallengeDetailExpandedProps> = (
       );
 
       console.log('✅ [ChallengeDetailExpanded] Analysis saved to DailyLog successfully');
-      setSaveStatus('success');
+      
+      // ✅ FIX: Hiển thị thông báo phù hợp dựa trên kết quả
+      if (isPassed) {
+        setSaveStatus('success');
+        setSaveMessage(`✅ Hoàn thành! Bạn đã thực hiện ${repsCompleted}/${targetTotalReps} reps với điểm số ${Math.round(qualityScore)}%.`);
+      } else {
+        // ✅ FIX: Chưa đủ rep - hiển thị warning rõ ràng, không reset trang
+        setSaveStatus('warning');
+        const remainingReps = targetTotalReps - repsCompleted;
+        setSaveMessage(`⚠️ Chưa đủ số lần lặp! Bạn đã thực hiện ${repsCompleted}/${targetTotalReps} reps. Cần thêm ${remainingReps} reps nữa để hoàn thành. Vui lòng thử lại!`);
+      }
       
       // Call onSaveComplete with analysis data to update status
       if (onSaveComplete) {
@@ -236,10 +247,11 @@ export const ChallengeDetailExpanded: React.FC<ChallengeDetailExpandedProps> = (
         });
       }
 
-      // Reset status after 5 seconds (longer to show success message)
+      // ✅ FIX: Không reset status ngay, giữ lại để user thấy thông báo
+      // Chỉ reset sau 8 giây để user có thời gian đọc thông báo
       setTimeout(() => {
         setSaveStatus('idle');
-      }, 5000);
+      }, isPassed ? 5000 : 8000); // Warning message hiển thị lâu hơn
     } catch (error: any) {
       console.error('❌ [ChallengeDetailExpanded] Failed to save analysis to DailyLog:', error);
       setSaveStatus('error');
@@ -247,15 +259,13 @@ export const ChallengeDetailExpanded: React.FC<ChallengeDetailExpandedProps> = (
       
       // Show user-friendly error message
       const errorMessage = error?.message || error?.originalError?.message || 'Failed to save. Please try again.';
+      setSaveMessage(errorMessage);
       console.error('Error details:', {
         message: errorMessage,
         status: error?.status,
         responseData: error?.responseData,
         originalError: error?.originalError,
       });
-      
-      // Optionally show alert to user
-      // alert(`Failed to save: ${errorMessage}`);
       
       // Reset error status after 5 seconds
       setTimeout(() => {
@@ -662,6 +672,8 @@ export const ChallengeDetailExpanded: React.FC<ChallengeDetailExpandedProps> = (
             <div className={`mt-4 p-3 rounded-lg !border ${
               saveStatus === 'success' 
                 ? '!bg-gradient-to-r !from-green-50/80 !to-emerald-50/80 !border-green-300' 
+                : saveStatus === 'warning'
+                ? '!bg-gradient-to-r !from-orange-50/80 !to-amber-50/80 !border-orange-300'
                 : saveStatus === 'error'
                 ? '!bg-red-50 !border-red-300'
                 : '!bg-blue-50 !border-blue-300'
@@ -692,12 +704,26 @@ export const ChallengeDetailExpanded: React.FC<ChallengeDetailExpandedProps> = (
                     </div>
                   </>
                 )}
+                {saveStatus === 'warning' && (
+                  <>
+                    <AlertCircle className="text-orange-600" size={18} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-orange-800">⚠️ Chưa đủ số lần lặp</p>
+                      <p className="text-xs text-orange-700 mt-0.5">{saveMessage || 'Bạn cần thực hiện đủ số reps yêu cầu để hoàn thành challenge.'}</p>
+                      {activeAPI.metrics && (
+                        <div className="mt-1.5 text-[11px] text-orange-600">
+                          Reps: {activeAPI.metrics.reps} / {challenge.reps * challenge.sets} | Score: {typeof activeAPI.metrics.quality_score === 'number' ? activeAPI.metrics.quality_score.toFixed(1) : 'N/A'}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
                 {saveStatus === 'error' && (
                   <>
                     <AlertCircle className="text-red-600" size={16} />
                     <div>
                       <p className="text-xs font-semibold text-red-800">❌ Save failed</p>
-                      <p className="text-[11px] text-red-600 mt-0.5">Please try again</p>
+                      <p className="text-[11px] text-red-600 mt-0.5">{saveMessage || 'Please try again'}</p>
                     </div>
                   </>
                 )}

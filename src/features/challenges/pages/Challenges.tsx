@@ -47,7 +47,7 @@ export const Challenges = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-lime-50/50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <motion.div
@@ -55,7 +55,7 @@ export const Challenges = () => {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="text-4xl text-gray-900 mb-2">AI Challenges</h1>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-sky-600 to-lime-600 bg-clip-text text-transparent mb-2">AI Challenges</h1>
           <p className="text-xl text-gray-600">
             Join exciting challenges and compete with athletes worldwide
           </p>
@@ -66,7 +66,7 @@ export const Challenges = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white rounded-xl shadow-md p-6 mb-8"
+          className="bg-white rounded-2xl shadow-lg p-6 mb-8 border border-gray-100"
         >
           <div className="grid md:grid-cols-3 gap-4">
             {/* Search */}
