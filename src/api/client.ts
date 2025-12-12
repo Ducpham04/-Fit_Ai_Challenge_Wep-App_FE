@@ -1,11 +1,11 @@
 // src/api/client.ts
 import axios from "axios";
 import { tokenService } from "./token.service";
+import { API_BASE_URL } from "../config/api";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8080/api";
-
+// Thêm /api vào baseURL vì tất cả routes backend đều có prefix /api
 const client = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: `${API_BASE_URL}/api`,
   headers: { "Content-Type": "application/json" },
 });
 

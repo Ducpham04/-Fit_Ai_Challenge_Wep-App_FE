@@ -6,7 +6,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { ExerciseType, ExerciseMetrics, resetCounter } from '@/api/fitnessAI.api';
 import { videoFrameToBase64 } from '@/api/fitnessAI.api';
 
-const FITNESS_AI_WS_URL = import.meta.env.VITE_FITNESS_AI_WS_URL || 'ws://localhost:8000';
+import { getFitnessAIWebSocketUrl } from '../config/api';
 
 export interface UseFitnessAIWebSocketReturn {
   metrics: ExerciseMetrics | null;
@@ -45,7 +45,7 @@ export const useFitnessAIWebSocket = (): UseFitnessAIWebSocketReturn => {
       }
       
       exerciseTypeRef.current = exerciseType;
-      const wsUrl = `${FITNESS_AI_WS_URL}/ws/exercise/${exerciseType}`;
+      const wsUrl = import.meta.env.VITE_FITNESS_AI_WS_URL || getFitnessAIWebSocketUrl(exerciseType);
       
       console.log('🔌 [WebSocket] Connecting to:', wsUrl);
       const ws = new WebSocket(wsUrl);

@@ -249,7 +249,9 @@ export const saveDailyTrainingLog = async (
       status: status,
     });
 
-    const baseUrl = client.defaults.baseURL || 'http://localhost:8080';
+    // Sử dụng baseURL từ client (đã được config tự động, có /api)
+    // Nhưng cần base URL không có /api cho file URLs
+    const baseUrl = (client.defaults.baseURL || 'http://localhost:8080/api').replace('/api', '');
     const url = `/user/daily-training-logs?${params.toString()}`;
     const fullUrl = `${baseUrl}${url}`;
     const body = analysisData || {};

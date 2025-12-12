@@ -3,8 +3,7 @@
  * Connects to Python AI Service for exercise analysis
  */
 import axios from 'axios';
-
-const FITNESS_AI_BASE_URL = import.meta.env.VITE_FITNESS_AI_URL || 'http://localhost:8000';
+import { FITNESS_AI_BASE_URL } from '../config/api';
 
 const fitnessAIClient = axios.create({
   baseURL: FITNESS_AI_BASE_URL,

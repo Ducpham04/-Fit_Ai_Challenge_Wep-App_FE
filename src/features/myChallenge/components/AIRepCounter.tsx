@@ -684,7 +684,7 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
             <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded text-xs">
               ⚠️ WebSocket connected but no metrics received. Check:
               <ul className="list-disc list-inside mt-1 ml-2">
-                <li>Python AI service is running on port 8000</li>
+                <li>Python AI service is running on port 5001</li>
                 <li>Frames are being sent (check Frames Sent count above)</li>
                 <li>Check browser console for WebSocket errors</li>
               </ul>
@@ -734,8 +734,8 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
                   <p className="text-sm font-semibold text-orange-800 mb-1">WebSocket Not Connected</p>
                   <p className="text-xs text-orange-700">
                     {pythonError 
-                      ? `Error: ${pythonError}. Please ensure the Python AI service is running on port 8000.`
-                      : 'Please ensure the Python AI service is running on port 8000. The metrics will update once connected.'}
+                      ? `Error: ${pythonError}. Please ensure the Python AI service is running on port 5001.`
+                      : 'Please ensure the Python AI service is running on port 5001. The metrics will update once connected.'}
                   </p>
                 </div>
               </div>
@@ -1161,8 +1161,8 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
                   <p className="text-sm font-semibold text-orange-800 mb-1">WebSocket Not Connected</p>
                   <p className="text-xs text-orange-700">
                     {pythonError 
-                      ? `Error: ${pythonError}. Please ensure the Python AI service is running on port 8000.`
-                      : 'Please ensure the Python AI service is running on port 8000. The metrics will update once connected.'}
+                      ? `Error: ${pythonError}. Please ensure the Python AI service is running on port 5001.`
+                      : 'Please ensure the Python AI service is running on port 5001. The metrics will update once connected.'}
                   </p>
                 </div>
               </div>
@@ -1323,7 +1323,7 @@ export const AIRepCounter: React.FC<AIRepCounterProps> = ({
                   <p className="text-sm text-orange-700">{pythonError}</p>
                   {!isPythonConnected && (
                     <p className="text-xs text-orange-600 mt-2">
-                      Please ensure the Python AI service is running on port 8000.
+                      Please ensure the Python AI service is running on port 5001.
                     </p>
                   )}
                 </div>

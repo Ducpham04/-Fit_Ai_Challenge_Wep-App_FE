@@ -5,8 +5,13 @@ import { useFitnessAI } from '@/hooks/useFitnessAI';
 import { useFitnessAIWebSocket } from '@/hooks/useFitnessAIWebSocket';
 import { ExerciseType } from '@/api/fitnessAI.api';
 import { X, PlayCircle, Activity, Wifi, WifiOff, Loader2, AlertCircle } from 'lucide-react';
+import { API_BASE_URL } from '../../../config/api';
 
-const baseURL = "http://localhost:8080/";
+// Lấy base URL từ config (tự động detect môi trường)
+// API_BASE_URL không có /api, dùng trực tiếp cho file URLs
+const getBaseURL = () => {
+  return API_BASE_URL;
+};
 
 interface ChallengeDetailModalProps {
   challenge: Challenge;
@@ -363,7 +368,7 @@ export const ChallengeDetailModal: React.FC<ChallengeDetailModalProps> = ({
                   </h4>
                   <div className="bg-gray-900 rounded-lg overflow-hidden max-h-40">
                     <video
-                      src={challenge.videoUrl.startsWith('http') ? challenge.videoUrl : `${baseURL}${challenge.videoUrl}`}
+                      src={challenge.videoUrl.startsWith('http') ? challenge.videoUrl : `${getBaseURL()}/${challenge.videoUrl}`}
                       controls
                       className="w-full h-full max-h-40 object-contain"
                       preload="metadata"

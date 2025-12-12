@@ -43,7 +43,7 @@ export const useFitnessAI = (): UseFitnessAIReturn => {
     } catch (err: any) {
       console.error('Fitness AI Service not available:', err);
       setIsConnected(false);
-      setError('Fitness AI Service is not available. Please ensure the service is running on port 8000.');
+      setError('Fitness AI Service is not available. Please ensure the service is running on port 5001.');
       return false;
     }
   }, []);

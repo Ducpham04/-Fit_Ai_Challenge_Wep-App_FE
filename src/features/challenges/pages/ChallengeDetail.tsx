@@ -71,7 +71,7 @@ useEffect(() => {
         >
           <div className="relative h-96">
             <img
-              src={"http://localhost:8080/" +challenge.goal.imageLink}
+              src={challenge.goal.imageLink.startsWith('http') ? challenge.goal.imageLink : `${import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:8080'}/${challenge.goal.imageLink}`}
               alt={challenge.title}
               className="w-full h-full object-cover"
             />
