@@ -2,6 +2,8 @@
 
 A modern fitness challenge platform powered by AI, featuring real-time pose detection, personalized workout tracking, and community challenges. Built with React, TypeScript, and TensorFlow.js.
 
+![Fit AI Challenge Home Page](https://github.com/Ducpham04/-Fit_Ai_Challenge_Wep-App_FE/blob/Duc_v2/docs/screenshots/home-page.png?raw=true)
+
 ## ✨ Features
 
 ### 🤖 AI-Powered Features
